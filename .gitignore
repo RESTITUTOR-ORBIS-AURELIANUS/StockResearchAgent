@@ -1,0 +1,26 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python environments and bytecode
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Test, lint, and type-check caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+
+# IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
