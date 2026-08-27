@@ -194,6 +194,7 @@ class ResearchGraphState(TypedDict, total=False):
     research_findings: Annotated[list[ResearchFinding], merge_research_findings]
     aggressive_recommendation: RecommendationRecord | None
     conservative_recommendation: RecommendationRecord | None
+    independent_recommendations_finalized: bool
     consensus_recommendation: RecommendationRecord | None
     consensus_assembly_run_summary: ConsensusAssemblyRunSummary | None
     research_report: ResearchReport | None

@@ -50,6 +50,9 @@ from stock_research_agent.graph.nodes.fundamental_research import (
     build_release_fundamental_runtime_node,
     build_targeted_fundamental_research_node,
 )
+from stock_research_agent.graph.nodes.independent_recommendations import (
+    finalize_independent_recommendations_node,
+)
 from stock_research_agent.graph.nodes.negotiation_score_validation import (
     route_after_negotiation_score_validation,
     validate_negotiation_scores_node,
@@ -101,6 +104,7 @@ __all__ = [
     "build_initial_fundamental_evidence_node",
     "build_initial_sentiment_flow_evidence_node",
     "build_initial_technical_evidence_node",
+    "finalize_independent_recommendations_node",
     "build_proposal_revision_stage_node",
     "build_reason_exchange_stage_node",
     "build_aggressive_portfolio_recommendation_node",

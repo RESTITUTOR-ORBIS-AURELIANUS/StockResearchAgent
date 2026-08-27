@@ -34,6 +34,7 @@ class ReportOutcome(StrEnum):
     """报告在投资决策链上的完成程度。"""
 
     CONSENSUS_READY = "CONSENSUS_READY"
+    DUAL_RECOMMENDATIONS_READY = "DUAL_RECOMMENDATIONS_READY"
     NO_ACTIONABLE_CONSENSUS = "NO_ACTIONABLE_CONSENSUS"
     INCOMPLETE = "INCOMPLETE"
 
@@ -44,6 +45,14 @@ class ReportHealth(StrEnum):
     CLEAN = "CLEAN"
     WITH_WARNINGS = "WITH_WARNINGS"
     WITH_ERRORS = "WITH_ERRORS"
+
+
+class RecommendationOutputMode(StrEnum):
+    """最终交付采用双独立建议还是委员会共识。"""
+
+    INCOMPLETE = "INCOMPLETE"
+    DUAL_INDEPENDENT = "DUAL_INDEPENDENT"
+    CONSENSUS = "CONSENSUS"
 
 
 class EvidenceReportSection(DomainModel):
@@ -150,6 +159,7 @@ class DisagreementDisclosure(DomainModel):
 class RecommendationReportSection(DomainModel):
     """三套建议及共识形成过程的最终可审计快照。"""
 
+    output_mode: RecommendationOutputMode = RecommendationOutputMode.INCOMPLETE
     aggressive: RecommendationRecord | None = None
     conservative: RecommendationRecord | None = None
     consensus: RecommendationRecord | None = None
@@ -193,7 +203,13 @@ class ResearchReport(DomainModel):
             and recommendations.conservative is not None
         )
         assembly = recommendations.consensus_assembly
-        if originals_ready and recommendations.consensus is not None:
+        if (
+            recommendations.output_mode is RecommendationOutputMode.DUAL_INDEPENDENT
+            and originals_ready
+            and recommendations.consensus is None
+        ):
+            expected_outcome = ReportOutcome.DUAL_RECOMMENDATIONS_READY
+        elif originals_ready and recommendations.consensus is not None:
             expected_outcome = ReportOutcome.CONSENSUS_READY
         elif (
             originals_ready

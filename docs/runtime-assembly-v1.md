@@ -11,9 +11,13 @@
 - 一个 `RoutedMarketDataProvider` 与一个 `AkshareNewsProvider`；
 - 一套共享 `DataServices`；
 - 一个 run-scoped `ResearchDataStore`；
-- 一个共享 ChatModel，以及 13 个具备不同角色 Prompt/Schema 的模型适配器；
+- 一个共享 ChatModel，以及模型适配器注册表；当前稳定运行图只注入四位证据研究员、策略师、
+  观点审查员和两位投资经理共 8 个适配器；
 - 四个按 `run_id` 延迟创建的证据 Agent 子图工厂；
-- 一张包含证据、观点、查证、双经理、协商、共识和报告节点的完整主图。
+- 一张包含证据、观点、查证、双经理、双建议确认和报告节点的可运行主图。
+
+仓库仍包含交叉评分、正式协商和共识组装适配器，便于开发分支持续演进；
+`codex/v1-no-debate` 的组合根不会把它们传给 `build_research_graph()`，因此真实运行不会触发辩论调用。
 
 四个证据 Agent 在同一个 `run_id` 下共享同一个 `ResearchToolContext`、Tool Registry 和
 DataStore，因此一个阶段保存的 `context_ref` 可以在后续查证阶段继续读取；不同运行仍保持隔离。

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from stock_research_agent.domain.recommendation import RecommendationRecord
-from stock_research_agent.reporting.models import ResearchReport
+from stock_research_agent.reporting.models import RecommendationOutputMode, ResearchReport
 
 
 def render_research_report_markdown(report: ResearchReport) -> str:
@@ -21,6 +21,7 @@ def render_research_report_markdown(report: ResearchReport) -> str:
         f"- 数据截止时间：{report.as_of.isoformat()}",
         f"- 研究范围：{report.target.type.value}",
         f"- 结果状态：`{report.outcome.value}`",
+        f"- 建议输出模式：`{report.recommendations.output_mode.value}`",
         f"- 运行健康状态：`{report.health.value}`",
         "",
         "## 证据",
@@ -32,26 +33,39 @@ def render_research_report_markdown(report: ResearchReport) -> str:
     lines.extend(["", "## 观点", "", f"共收录 {report.theses.total_count} 条观点。", ""])
     lines.extend(_render_theses(report))
     lines.extend(["", "## 投资建议", ""])
+    dual_mode = (
+        report.recommendations.output_mode is RecommendationOutputMode.DUAL_INDEPENDENT
+    )
     lines.extend(
         _render_recommendation(
-            "激进型基金经理原始建议",
+            "激进型基金经理正式建议" if dual_mode else "激进型基金经理原始建议",
             report.recommendations.aggressive,
         )
     )
     lines.extend(
         _render_recommendation(
-            "保守型基金经理原始建议",
+            "保守型基金经理正式建议" if dual_mode else "保守型基金经理原始建议",
             report.recommendations.conservative,
         )
     )
-    lines.extend(
-        _render_recommendation(
-            "协商后的最终建议",
-            report.recommendations.consensus,
+    if dual_mode:
+        lines.extend(
+            [
+                "### v1 输出说明",
+                "",
+                "本版本不启用基金经理辩论与共识组装；上述两份独立建议共同构成正式输出。",
+                "",
+            ]
         )
-    )
-    lines.extend(["", "## 未决分歧", ""])
-    lines.extend(_render_disagreements(report))
+    else:
+        lines.extend(
+            _render_recommendation(
+                "协商后的最终建议",
+                report.recommendations.consensus,
+            )
+        )
+        lines.extend(["", "## 未决分歧", ""])
+        lines.extend(_render_disagreements(report))
     lines.extend(["", "## 运行诊断", ""])
     lines.extend(_render_diagnostics(report))
     lines.extend(["", "## 免责声明", "", report.disclaimer, ""])

@@ -144,7 +144,7 @@ def test_runtime_ainvoke_applies_safe_default_and_preserves_explicit_override() 
     asyncio.run(scenario())
 
 
-def test_runtime_assembles_full_graph_and_all_model_dependencies_without_io() -> None:
+def test_runtime_assembles_v1_no_debate_graph_without_io() -> None:
     async def scenario() -> None:
         runtime = await create_research_runtime(
             runtime_settings(),
@@ -209,12 +209,17 @@ def test_runtime_assembles_full_graph_and_all_model_dependencies_without_io() ->
                 "review_active_thesis",
                 "generate_aggressive_recommendation",
                 "generate_conservative_recommendation",
-                "aggressive_cross_review",
-                "conservative_cross_review",
-                "exchange_negotiation_reasons",
-                "assemble_consensus_recommendation",
+                "finalize_independent_recommendations",
                 "compose_report",
             } <= graph_nodes
+            assert {
+                "normalize_proposals",
+                "aggressive_cross_review",
+                "conservative_cross_review",
+                "validate_conflict_scores",
+                "exchange_negotiation_reasons",
+                "assemble_consensus_recommendation",
+            }.isdisjoint(graph_nodes)
         finally:
             await runtime.aclose()
 

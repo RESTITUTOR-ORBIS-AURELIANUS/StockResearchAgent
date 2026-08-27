@@ -16,8 +16,8 @@
 | Tool | 已实现 25 个数据 Tool 和 5 个确定性技术计算 Tool，共 30 个唯一 Tool；Event 角色包含每日快照、公开新闻公告和卖方研究入口 |
 | 行情存储 | 已实现 run-scoped 进程内 `ResearchDataStore`；重启后不保留 |
 | 领域模型 | `EvidenceRecord`、运行时 `EvidenceCollection`、`ThesisRecord`、`ResearchRequest`、`ResearchFinding`、`RecommendationRecord` 已实现 |
-| LangGraph | 主图支持四位证据 Agent 串行采集、证据错误立即停止并生成不完整报告、Collector、候选观点、逐观点查证、两位经理独立建议、提案规范化、交叉评分与有界纠错、确定性共识门、最多三轮的正式协商循环、最终共识建议组装，以及所有终止分支统一进入的确定性报告节点 |
-| LLM Agent | 四位证据研究员、策略师、观点审查员、两位投资经理及其交叉评分/纠错和正式协商三阶段适配器、受限的共识建议文字合成适配器已实现；第一版不设主席或仲裁路由，报告节点不调用 LLM |
+| LangGraph | `codex/v1-no-debate` 默认主图支持四位证据 Agent 串行采集、证据错误立即停止并生成不完整报告、Collector、候选观点、逐观点查证、两位经理独立建议、双建议正式确认，以及所有终止分支统一进入的确定性报告节点；辩论代码保留但不装配 |
+| LLM Agent | 默认运行图使用四位证据研究员、策略师、观点审查员和两位投资经理；交叉评分、协商与共识合成适配器只作为后续开发代码保留，报告节点不调用 LLM |
 | LLM 观测 | 所有结构化模型通道启用 strict JSON Schema、原始响应保留、字段级 Pydantic 诊断、一次受控纠正和脱敏 JSONL |
 | 应用层 | 已实现共享资源的异步运行时和完整 CLI；每日调度、对外 HTTP API、数据库/对象存储长期持久化均未实现 |
 
@@ -55,25 +55,27 @@
    - 已实现两位投资组合经理共同使用的独立建议 Draft Schema；
 12. [`portfolio-manager-nodes-v1.md`](portfolio-manager-nodes-v1.md)
    - 已实现两位经理的独立角色 Prompt、并行节点、引用校验、稳定 ID 装配和失败关闭边界；
-13. [`proposal-normalization-node-v1.md`](proposal-normalization-node-v1.md)
+13. [`v1-no-debate-release.md`](v1-no-debate-release.md)
+   - 当前可运行第一版的正式输出规则、主图路径和与开发版辩论代码的边界；
+14. [`proposal-normalization-node-v1.md`](proposal-normalization-node-v1.md)
    - 已实现两份独立建议的不可变汇合、规范化决策槽及对称冲突生成；
-14. [`cross-review-schema-v1.md`](cross-review-schema-v1.md)
+15. [`cross-review-schema-v1.md`](cross-review-schema-v1.md)
    - 已实现两位经理首评与纠错使用的冻结输入、尝试轨迹、确定性反馈和严格 LLM 输出 Schema；
-15. [`cross-review-nodes-v1.md`](cross-review-nodes-v1.md)
+16. [`cross-review-nodes-v1.md`](cross-review-nodes-v1.md)
    - 已实现两位经理的角色 Prompt、结构化模型适配器、并行首评、确定性评价写入及违规经理局部纠错；
-16. [`conflict-score-validator-v1.md`](conflict-score-validator-v1.md)
+17. [`conflict-score-validator-v1.md`](conflict-score-validator-v1.md)
    - 已实现确定性冲突评分规则、来源指纹、最多三次调用预算、局部纠错路由和失败关闭语义；
-17. [`formal-negotiation-schema-v1.md`](formal-negotiation-schema-v1.md)
+18. [`formal-negotiation-schema-v1.md`](formal-negotiation-schema-v1.md)
    - 已实现共识门和正式协商使用的 Draft、Input、Record、运行摘要及 `ResearchGraphState` 字段；
-18. [`formal-negotiation-nodes-v1.md`](formal-negotiation-nodes-v1.md)
+19. [`formal-negotiation-nodes-v1.md`](formal-negotiation-nodes-v1.md)
    - 已实现共识阈值、三阶段原子流程、冲突组闭包重评、无变化轮、最多三轮及未决条目排除路由；
-19. [`consensus-recommendation-assembler-v1.md`](consensus-recommendation-assembler-v1.md)
+20. [`consensus-recommendation-assembler-v1.md`](consensus-recommendation-assembler-v1.md)
    - 已实现只消费 `AGREED` 条目的受限文字合成、确定性组装、信心度规则、无可执行共识和失败边界；
-20. [`runtime-assembly-v1.md`](runtime-assembly-v1.md)
+21. [`runtime-assembly-v1.md`](runtime-assembly-v1.md)
    - 已实现配置到 Provider、Service、Tool、Agent 子图、全套模型适配器和主图的真实异步组合根与资源生命周期；
-21. [`llm-structured-output-observability-v1.md`](llm-structured-output-observability-v1.md)
+22. [`llm-structured-output-observability-v1.md`](llm-structured-output-observability-v1.md)
    - 已实现 strict JSON Schema、本地完整校验、字段级失败纠正、脱敏 JSONL 和报告关联 ID；
-22. [`report-composer-v1.md`](report-composer-v1.md)
+23. [`report-composer-v1.md`](report-composer-v1.md)
    - 已实现不调用 LLM 的结构化报告、确定性 Markdown、无共识披露和上游失败诊断；
 
 `agent-tools-v1.md` 和 `data-services-v1.md` 保留为两层的设计说明；精确字段分别以上述 Tool

@@ -3,6 +3,7 @@
 from stock_research_agent.reporting.models import (
     DisagreementDisclosure,
     EvidenceReportSection,
+    RecommendationOutputMode,
     RecommendationReportSection,
     ReportDiagnostics,
     ReportHealth,
@@ -16,6 +17,7 @@ __all__ = [
     "DisagreementDisclosure",
     "EvidenceReportSection",
     "RecommendationReportSection",
+    "RecommendationOutputMode",
     "ReportDiagnostics",
     "ReportHealth",
     "ReportOutcome",

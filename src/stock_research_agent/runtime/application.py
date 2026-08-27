@@ -379,11 +379,6 @@ async def create_research_runtime(
             thesis_validation_model=models.thesis_validator,
             aggressive_portfolio_manager_model=models.aggressive_portfolio_manager,
             conservative_portfolio_manager_model=models.conservative_portfolio_manager,
-            aggressive_cross_review_model=models.aggressive_cross_review,
-            conservative_cross_review_model=models.conservative_cross_review,
-            aggressive_negotiation_model=models.aggressive_negotiation,
-            conservative_negotiation_model=models.conservative_negotiation,
-            consensus_assembly_model=models.consensus_assembly,
         )
         return ResearchRuntime(
             settings=settings,

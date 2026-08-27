@@ -27,19 +27,13 @@
 新证据立即回到同一观点上下文，最终固化为 `SUPPORTED/REFUTED/MIXED/INCONCLUSIVE`。Collector
 不做语义去重。观点查证结束后，`AggressivePortfolioManager` 与
 `ConservativePortfolioManager` 会并行读取同一批终态观点，分别输出独立的结构化投资建议；程序只
-允许 `SUPPORTED/MIXED` 观点成为直接建议依据，并负责目标绑定、稳定 ID 和初始坚持分装配。双方
-两份经理建议的确定性规范化、首次交叉评分严格 Schema、模型适配器、并行节点、确定性冲突评分校验，
-以及只重评违规经理的有界纠错循环均已完成。一次首评加最多两次纠错，单经理总调用次数不超过 3，
-纠错不增加 `debate_round`。评分合法后的确定性 `ConsensusGateNode` 和最多三轮正式协商也已接入：
-每轮按“理由交换 → 原提议方修订 → 必要时对受影响冲突组闭包重评”原子执行；只有实质修订触发
-重评，无变化仍消耗一轮，重评后再次校验每位经理对互斥建议评分和 `<= 0`。达到轮次上限后，仍未达成共识的
-条目固化为 `EXCLUDED`，不进入最终委员会建议；主图直接进入
-`ConsensusRecommendationAssemblerNode`。组装节点只把 `AGREED` 条目交给受限的结构化模型做顶层
-文字压缩，不能新增、修改或仲裁原子建议。缺少 `ACTION/HORIZON/RISK_CONTROL` 或没有
-任何 `AGREED` 条目时，程序以 `no_actionable_consensus` 正常结束且不生成
-`consensus_recommendation`。两份经理原始建议始终保留。第一版不设主席或仲裁路由。主图的所有
-正常和失败分支最终都会进入确定性的 `ReportComposerNode`，生成严格 `ResearchReport` 与 Markdown；
-长期持久化仍将在后续接入。
+允许 `SUPPORTED/MIXED` 观点成为直接建议依据，并负责目标绑定、稳定 ID 和初始坚持分装配。
+
+当前 `codex/v1-no-debate` 分支的生产运行图到这里即停止投资决策推演：一个确定性节点核对两份建议
+属于同一轮研究后，把它们共同标记为正式输出，再交给 `ReportComposerNode` 生成严格
+`ResearchReport` 与 Markdown。报告状态为 `DUAL_RECOMMENDATIONS_READY`，不会虚构共识建议，也不会
+把“未执行辩论”写成“没有分歧”。交叉评分、正式协商和共识组装代码仍保留在仓库中，供
+`codex/develop` 继续研发，但不属于本分支的默认运行路径。长期持久化仍将在后续接入。
 
 Provider 对 89 个已支持接口统一采用主服务器优先策略。主服务器发生网络、HTTP、
 认证、权限、限流、业务或响应格式错误时，自动回退备用服务器；成功的备用结果会在
@@ -92,8 +86,8 @@ uv run stock-research-agent \
 `diagnostic_event=llm_...` 可直接关联该文件；本地校验失败默认携具体错误自动纠正一次。
 
 该 CLI 固定以 `MARKET / A_SHARE / A股市场` 作为每日研究范围，并会装配共享的 Provider、
-Service、DataStore、Tool、四个证据子图以及完整投资决策链。Runtime 默认把 LangGraph
-`recursion_limit` 设置为 300，给多观点串行查证和最多三轮协商预留足够步数。
+Service、DataStore、Tool、四个证据子图以及无辩论双经理投资决策链。Runtime 默认把 LangGraph
+`recursion_limit` 设置为 300，给多观点串行查证预留足够步数。
 并使用 `await graph.ainvoke(...)` 执行真实工作流。省略 `--output` 时报告写到标准输出；
 `--format json` 可输出结构化 `ResearchReport`。运行结束或异常退出时，HTTP 连接池、AKShare
 线程池和本轮进程内原始数据都会被回收。退出码 `0` 表示报告完整（包括正常的“无可执行共识”），
@@ -109,7 +103,9 @@ Service、DataStore、Tool、四个证据子图以及完整投资决策链。Run
 投资建议 Schema 与两位经理节点见
 [`docs/investment-recommendation-schema-v1.md`](docs/investment-recommendation-schema-v1.md) 和
 [`docs/portfolio-manager-nodes-v1.md`](docs/portfolio-manager-nodes-v1.md)。
-交叉评分、确定性校验与有界纠错契约见
+当前分支的正式输出边界见
+[`docs/v1-no-debate-release.md`](docs/v1-no-debate-release.md)。仓库中保留的交叉评分、确定性校验与
+有界纠错研发契约见
 [`docs/cross-review-nodes-v1.md`](docs/cross-review-nodes-v1.md)、
 [`docs/cross-review-schema-v1.md`](docs/cross-review-schema-v1.md) 和
 [`docs/conflict-score-validator-v1.md`](docs/conflict-score-validator-v1.md)。
@@ -124,7 +120,7 @@ Service、DataStore、Tool、四个证据子图以及完整投资决策链。Run
 
 完整文档入口见
 [`docs/README.md`](docs/README.md)。该索引会明确区分
-当前已经实现的 Provider、Service、Tool、四位证据 Agent、投资决策、正式协商与最终共识建议组装切片，
+当前默认运行的 Provider、Service、Tool、四位证据 Agent 和双经理正式输出，以及保留的辩论研发切片，
 真实运行装配和报告生成，以及仍待实现的长期持久化边界。
 
 ## 运行测试

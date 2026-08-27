@@ -18,6 +18,7 @@ from stock_research_agent.graph.state import ResearchGraphState
 from stock_research_agent.reporting import (
     DisagreementDisclosure,
     EvidenceReportSection,
+    RecommendationOutputMode,
     RecommendationReportSection,
     ReportDiagnostics,
     ReportHealth,
@@ -83,6 +84,7 @@ def report_composer_node(state: ResearchGraphState) -> ResearchGraphState:
 
     disagreement = _build_disagreement_disclosure(state)
     recommendations = RecommendationReportSection(
+        output_mode=_recommendation_output_mode(state),
         aggressive=_copy_optional(state.get("aggressive_recommendation")),
         conservative=_copy_optional(state.get("conservative_recommendation")),
         consensus=_copy_optional(state.get("consensus_recommendation")),
@@ -304,6 +306,11 @@ def _report_outcome(
         recommendations.aggressive is not None
         and recommendations.conservative is not None
     )
+    if (
+        originals_ready
+        and recommendations.output_mode is RecommendationOutputMode.DUAL_INDEPENDENT
+    ):
+        return ReportOutcome.DUAL_RECOMMENDATIONS_READY
     if originals_ready and recommendations.consensus is not None:
         return ReportOutcome.CONSENSUS_READY
     assembly = recommendations.consensus_assembly
@@ -315,6 +322,20 @@ def _report_outcome(
     ):
         return ReportOutcome.NO_ACTIONABLE_CONSENSUS
     return ReportOutcome.INCOMPLETE
+
+
+def _recommendation_output_mode(
+    state: ResearchGraphState,
+) -> RecommendationOutputMode:
+    if state.get("independent_recommendations_finalized"):
+        return RecommendationOutputMode.DUAL_INDEPENDENT
+    if (
+        state.get("consensus_recommendation") is not None
+        or state.get("consensus_gate_report") is not None
+        or state.get("consensus_assembly_run_summary") is not None
+    ):
+        return RecommendationOutputMode.CONSENSUS
+    return RecommendationOutputMode.INCOMPLETE
 
 
 def _report_health(diagnostics: ReportDiagnostics) -> ReportHealth:

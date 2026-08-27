@@ -34,8 +34,16 @@ from stock_research_agent.domain.recommendation import (
 )
 from stock_research_agent.domain.thesis import ThesisOrigin, ThesisValidation
 from stock_research_agent.graph import build_research_graph
+from stock_research_agent.graph.nodes.independent_recommendations import (
+    finalize_independent_recommendations_node,
+)
 from stock_research_agent.graph.nodes.report_composer import report_composer_node
-from stock_research_agent.reporting import ReportHealth, ReportOutcome, ResearchReport
+from stock_research_agent.reporting import (
+    RecommendationOutputMode,
+    ReportHealth,
+    ReportOutcome,
+    ResearchReport,
+)
 
 RUN_ID = "run_20260826_report"
 AS_OF = datetime.fromisoformat("2026-08-26T15:30:00+08:00")
@@ -66,6 +74,32 @@ def test_complete_state_generates_structured_report_and_markdown() -> None:
     assert "## 未决分歧" in markdown
     assert "## 运行诊断" in markdown
     assert "仅供研究，不构成投资建议" in markdown
+
+
+def test_v1_no_debate_finalizes_both_independent_recommendations_as_output() -> None:
+    state = _complete_state()
+    state.pop("consensus_recommendation")
+
+    finalized = finalize_independent_recommendations_node(state)
+    state.update(finalized)
+    result = report_composer_node(state)
+
+    assert finalized == {"independent_recommendations_finalized": True}
+    report = result["research_report"]
+    assert report.outcome is ReportOutcome.DUAL_RECOMMENDATIONS_READY
+    assert (
+        report.recommendations.output_mode
+        is RecommendationOutputMode.DUAL_INDEPENDENT
+    )
+    assert report.recommendations.aggressive is not None
+    assert report.recommendations.conservative is not None
+    assert report.recommendations.consensus is None
+    markdown = result["research_report_markdown"]
+    assert "### 激进型基金经理正式建议" in markdown
+    assert "### 保守型基金经理正式建议" in markdown
+    assert "### v1 输出说明" in markdown
+    assert "## 未决分歧" not in markdown
+    assert "### 协商后的最终建议" not in markdown
 
 
 def test_only_initialized_state_still_generates_honest_incomplete_report() -> None:

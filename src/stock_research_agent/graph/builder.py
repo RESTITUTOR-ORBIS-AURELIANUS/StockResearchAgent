@@ -79,6 +79,9 @@ from stock_research_agent.graph.nodes.fundamental_research import (
     fundamental_request_budget_exhausted,
     has_active_fundamental_request,
 )
+from stock_research_agent.graph.nodes.independent_recommendations import (
+    finalize_independent_recommendations_node,
+)
 from stock_research_agent.graph.nodes.initialize_run import initialize_run_node
 from stock_research_agent.graph.nodes.negotiation_score_validation import (
     route_after_negotiation_score_validation,
@@ -289,10 +292,6 @@ def build_research_graph(
                         limits=portfolio_recommendation_limits,
                     ),
                 )
-                builder.add_node(
-                    "normalize_proposals",
-                    proposal_normalization_node,
-                )
                 builder.add_edge(
                     "finalize_thesis_validation",
                     "generate_aggressive_recommendation",
@@ -301,17 +300,32 @@ def build_research_graph(
                     "finalize_thesis_validation",
                     "generate_conservative_recommendation",
                 )
-                builder.add_edge(
-                    [
-                        "generate_aggressive_recommendation",
-                        "generate_conservative_recommendation",
-                    ],
-                    "normalize_proposals",
-                )
                 if aggressive_cross_review_model is None:
-                    builder.add_edge("normalize_proposals", terminal)
+                    builder.add_node(
+                        "finalize_independent_recommendations",
+                        finalize_independent_recommendations_node,
+                    )
+                    builder.add_edge(
+                        [
+                            "generate_aggressive_recommendation",
+                            "generate_conservative_recommendation",
+                        ],
+                        "finalize_independent_recommendations",
+                    )
+                    builder.add_edge("finalize_independent_recommendations", terminal)
                 else:
                     assert conservative_cross_review_model is not None
+                    builder.add_node(
+                        "normalize_proposals",
+                        proposal_normalization_node,
+                    )
+                    builder.add_edge(
+                        [
+                            "generate_aggressive_recommendation",
+                            "generate_conservative_recommendation",
+                        ],
+                        "normalize_proposals",
+                    )
                     configured_cross_review_limits = (
                         cross_review_limits or PortfolioCrossReviewLimits()
                     )
