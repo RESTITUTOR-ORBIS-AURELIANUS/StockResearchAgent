@@ -16,7 +16,7 @@
 | Tool | 已实现 25 个数据 Tool 和 5 个确定性技术计算 Tool，共 30 个唯一 Tool；Event 角色包含每日快照、公开新闻公告和卖方研究入口 |
 | 行情存储 | 已实现 run-scoped 进程内 `ResearchDataStore`；重启后不保留 |
 | 领域模型 | `EvidenceRecord`、运行时 `EvidenceCollection`、`ThesisRecord`、`ResearchRequest`、`ResearchFinding`、`RecommendationRecord` 已实现 |
-| LangGraph | `codex/v1-no-debate` 默认主图支持四位证据 Agent 串行采集、证据错误立即停止并生成不完整报告、Collector、候选观点、逐观点查证、两位经理独立建议、双建议正式确认，以及所有终止分支统一进入的确定性报告节点；辩论代码保留但不装配 |
+| LangGraph | `main` 与 `v1-no-debate` 默认主图支持四位证据 Agent 串行采集、证据错误立即停止并生成不完整报告、Collector、候选观点、逐观点查证、两位经理独立建议、双建议正式确认，以及所有终止分支统一进入的确定性报告节点；辩论代码保留但不装配 |
 | LLM Agent | 默认运行图使用四位证据研究员、策略师、观点审查员和两位投资经理；交叉评分、协商与共识合成适配器只作为后续开发代码保留，报告节点不调用 LLM |
 | LLM 观测 | 所有结构化模型通道启用 strict JSON Schema、原始响应保留、字段级 Pydantic 诊断、一次受控纠正和脱敏 JSONL |
 | 应用层 | 已实现共享资源的异步运行时和完整 CLI；每日调度、对外 HTTP API、数据库/对象存储长期持久化均未实现 |
