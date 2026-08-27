@@ -5,7 +5,8 @@ from contextlib import asynccontextmanager
 
 import httpx
 
-from stock_research_agent.config import ProviderSettings
+from stock_research_agent.config import AkshareSettings, ProviderSettings
+from stock_research_agent.providers.akshare_news import AkshareNewsProvider
 from stock_research_agent.providers.backup import BackupTushareProvider
 from stock_research_agent.providers.cache import InMemoryProviderCache, ProviderCache
 from stock_research_agent.providers.primary import PrimaryRestProvider
@@ -36,5 +37,20 @@ async def open_market_data_provider(
             primary,
             backup,
             cache or InMemoryProviderCache(),
-            allow_paid_fallback=settings.allow_paid_fallback,
         )
+
+
+@asynccontextmanager
+async def open_akshare_news_provider(
+    settings: AkshareSettings,
+) -> AsyncIterator[AkshareNewsProvider]:
+    """创建专用于公开新闻/公告抓取的有界线程池。"""
+
+    provider = AkshareNewsProvider(
+        timeout_seconds=settings.request_timeout_seconds,
+        max_workers=settings.max_workers,
+    )
+    try:
+        yield provider
+    finally:
+        await provider.aclose()

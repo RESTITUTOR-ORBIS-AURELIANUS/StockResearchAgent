@@ -38,6 +38,10 @@ class ResearchRequest(DomainModel):
         }
         if self.status in completed_statuses and self.completed_at is None:
             raise ValueError("已结束的 ResearchRequest 必须填写 completed_at")
+        if self.status not in completed_statuses and self.completed_at is not None:
+            raise ValueError("未结束的 ResearchRequest 不能填写 completed_at")
         if self.status is ResearchRequestStatus.COMPLETED and not self.result_evidence_ids:
             raise ValueError("COMPLETED 的 ResearchRequest 必须至少返回一个 evidence_id")
+        if self.status is not ResearchRequestStatus.COMPLETED and self.result_evidence_ids:
+            raise ValueError("只有 COMPLETED 的 ResearchRequest 可以关联 evidence_id")
         return self

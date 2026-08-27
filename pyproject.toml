@@ -5,7 +5,10 @@ description = "Evidence-driven A-share research agent built with LangGraph"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "akshare==1.18.94",
     "httpx>=0.28.1",
+    "langchain-core>=1.5.6",
+    "langchain-openai>=1.5.2",
     "langgraph>=1.2.11",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",

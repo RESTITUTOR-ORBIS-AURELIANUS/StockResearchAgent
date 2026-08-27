@@ -26,11 +26,19 @@ class BackupTushareProvider:
         self._timeout_seconds = timeout_seconds
 
     async def query(self, request: ProviderQuery) -> ProviderResult:
+        # 备用兼容端采用 Tushare DataApi 协议，但明确拒绝通用 limit/offset。
+        # Service 仍可对主端使用分页；一旦回退到备用端，这里移除分页参数并
+        # 一次返回备用端的完整响应。BaseDataService 接受超过 page_size 的一页，
+        # 仍会执行 max_rows、字段、as_of 和去重校验。
+        wire_params = {
+            name: value for name, value in request.params.items() if name not in {"limit", "offset"}
+        }
+        wire_request = request.model_copy(update={"params": wire_params})
         body = {
-            "api_name": request.api_name,
+            "api_name": wire_request.api_name,
             "token": self._token.get_secret_value(),
-            "params": request.params,
-            "fields": ",".join(request.fields),
+            "params": wire_request.params,
+            "fields": ",".join(wire_request.fields),
         }
         try:
             response = await self._client.post(
@@ -68,7 +76,7 @@ class BackupTushareProvider:
             ) from exc
 
         return parse_provider_payload(
-            request,
+            wire_request,
             ProviderSource.BACKUP,
             payload,
             len(response.content),

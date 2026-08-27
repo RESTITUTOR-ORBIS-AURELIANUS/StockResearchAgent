@@ -14,6 +14,9 @@ ProviderParam = str | int | float | bool
 class ProviderSource(StrEnum):
     PRIMARY = "PRIMARY"
     BACKUP = "BACKUP"
+    AKSHARE_EASTMONEY = "AKSHARE_EASTMONEY"
+    AKSHARE_THS = "AKSHARE_THS"
+    AKSHARE_CLS = "AKSHARE_CLS"
 
 
 class ProviderQuery(DomainModel):

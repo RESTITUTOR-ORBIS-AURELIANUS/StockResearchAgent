@@ -106,6 +106,29 @@ def parse_provider_payload(
             )
         items.append(dict(zip(fields, row, strict=True)))
 
+    raw_has_more = data.get("has_more")
+    if raw_has_more is not None and not isinstance(raw_has_more, bool):
+        raise ProviderSchemaError(
+            ProviderErrorCode.SCHEMA_ERROR,
+            request.api_name,
+            "data.has_more 必须是布尔值",
+            provider=provider,
+            provider_code=code,
+        )
+    if isinstance(raw_has_more, bool):
+        has_more = raw_has_more
+    else:
+        # 标准 Tushare DataApi 的响应经常没有 has_more。若一页正好达到
+        # limit，就继续请求下一 offset；最后最多多取一个合法空页，却不会
+        # 把满页误当成完整数据。
+        page_limit = request.params.get("limit")
+        has_more = (
+            isinstance(page_limit, int)
+            and not isinstance(page_limit, bool)
+            and page_limit > 0
+            and len(items) >= page_limit
+        )
+
     return ProviderResult(
         api_name=request.api_name,
         provider=provider,
@@ -113,6 +136,6 @@ def parse_provider_payload(
         fields=tuple(fields),
         items=items,
         provider_code=code,
-        has_more=data.get("has_more") is True,
+        has_more=has_more,
         response_bytes=response_bytes,
     )

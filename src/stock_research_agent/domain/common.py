@@ -31,8 +31,16 @@ class SourceReference(DomainModel):
     provider: str = Field(min_length=1, max_length=100)
     interface: str = Field(min_length=1, max_length=100)
     record_key: str = Field(min_length=1, max_length=255)
-    published_at: AwareDatetime
+    published_at: AwareDatetime | None = None
+    fetched_at: AwareDatetime | None = None
+    data_as_of: date | None = None
     url: str | None = None
+
+    @model_validator(mode="after")
+    def require_source_time(self) -> "SourceReference":
+        if self.published_at is None and self.fetched_at is None:
+            raise ValueError("来源必须至少提供 published_at 或 fetched_at")
+        return self
 
 
 class TimeRange(DomainModel):

@@ -19,6 +19,7 @@ htmlcov/
 # Build artifacts
 build/
 dist/
+.artifacts/
 
 # IDE and operating-system files
 .idea/

@@ -61,6 +61,17 @@ class ResearchRequestStatus(StrEnum):
     CANCELLED_BY_BUDGET = "CANCELLED_BY_BUDGET"
 
 
+class ResearchFindingOutcome(StrEnum):
+    """一次定向查证请求的可审计结果。"""
+
+    EVIDENCE_FOUND = "EVIDENCE_FOUND"
+    NO_MATCHING_EVIDENCE = "NO_MATCHING_EVIDENCE"
+    INSUFFICIENT_TOOL_COVERAGE = "INSUFFICIENT_TOOL_COVERAGE"
+    SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
+    REQUEST_FAILED = "REQUEST_FAILED"
+    BUDGET_EXHAUSTED = "BUDGET_EXHAUSTED"
+
+
 class RecommendationProfile(StrEnum):
     AGGRESSIVE = "AGGRESSIVE"
     CONSERVATIVE = "CONSERVATIVE"
@@ -93,16 +104,48 @@ class ProposalStatus(StrEnum):
     AGREED = "AGREED"
     REJECTED = "REJECTED"
     WITHDRAWN = "WITHDRAWN"
+    EXCLUDED = "EXCLUDED"
     ARBITRATED = "ARBITRATED"
 
 
 class DebateStatus(StrEnum):
     AGREED = "AGREED"
-    PARTIALLY_ARBITRATED = "PARTIALLY_ARBITRATED"
-    ARBITRATED = "ARBITRATED"
-    DISAGREED = "DISAGREED"
+    PARTIAL_CONSENSUS = "PARTIAL_CONSENSUS"
 
 
 class PortfolioManager(StrEnum):
     AGGRESSIVE = "AggressivePortfolioManager"
     CONSERVATIVE = "ConservativePortfolioManager"
+
+
+class ConsensusItemOutcome(StrEnum):
+    AGREED = "AGREED"
+    NEGOTIATING = "NEGOTIATING"
+    REJECTED = "REJECTED"
+    WITHDRAWN = "WITHDRAWN"
+    EXCLUDED = "EXCLUDED"
+
+
+class ConsensusRoute(StrEnum):
+    ASSEMBLE = "ASSEMBLE"
+    NEGOTIATE = "NEGOTIATE"
+
+
+class NegotiationArgumentType(StrEnum):
+    SUPPORT_REASON = "SUPPORT_REASON"
+    OBJECTION = "OBJECTION"
+    RISK_WARNING = "RISK_WARNING"
+    FACT_CORRECTION = "FACT_CORRECTION"
+    MODIFICATION_REASON = "MODIFICATION_REASON"
+
+
+class NegotiationStance(StrEnum):
+    SUPPORT = "SUPPORT"
+    CONDITIONAL_ACCEPT = "CONDITIONAL_ACCEPT"
+    OPPOSE = "OPPOSE"
+
+
+class ProposalRevisionAction(StrEnum):
+    KEEP = "KEEP"
+    MODIFY = "MODIFY"
+    WITHDRAW = "WITHDRAW"
