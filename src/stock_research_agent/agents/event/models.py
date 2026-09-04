@@ -211,7 +211,7 @@ class EventAgentLimits:
     research_lookback_days: int = 7
     max_verification_rounds: int = 2
     max_requests_per_round: int = 4
-    max_total_tool_calls: int = 16
+    max_total_tool_calls: int = 32
 
     def __post_init__(self) -> None:
         if not 3 <= self.daily_candidate_count <= 20:

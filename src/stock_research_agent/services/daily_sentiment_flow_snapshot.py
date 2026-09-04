@@ -8,7 +8,9 @@ from typing import Any
 
 from pydantic import Field
 
+from stock_research_agent.domain import ResearchTarget
 from stock_research_agent.domain.base import DomainModel
+from stock_research_agent.domain.enums import TargetType
 from stock_research_agent.services.base import AsOfValue
 from stock_research_agent.services.daily_technical_snapshot import (
     DailyTechnicalSnapshot,
@@ -118,6 +120,7 @@ class DailySentimentFlowSnapshot(DomainModel):
     industry_top_inflows: tuple[IndustryFlowSnapshot, ...]
     industry_top_outflows: tuple[IndustryFlowSnapshot, ...]
     stock_candidates: DailyStockFlowCandidateGroups
+    authorized_targets: tuple[ResearchTarget, ...]
     coverage: DailySentimentFlowCoverage
 
 
@@ -283,44 +286,46 @@ def _aggregate_snapshot(
     industry_flows = [_industry_flow(row) for row in industry_rows]
     industry_flows = [item for item in industry_flows if item is not None]
 
+    market_flow = DailyMarketFlowSnapshot(
+        hsgt_history=tuple(
+            item
+            for row in _sorted_by_date(_items(datasets, "sentiment_hsgt_flow"))
+            if (item := _hsgt_point(row)) is not None
+        ),
+        market_moneyflow_dc=_market_flow(_latest_row(_items(datasets, "sentiment_market_flow_dc"))),
+        margin_markets=tuple(
+            item
+            for label in ("sentiment_margin_sse", "sentiment_margin_szse")
+            for row in _items(datasets, label)
+            if (item := _margin_flow(row)) is not None
+        ),
+    )
+    industry_top_inflows = tuple(_rank_by_net_amount(industry_flows, candidate_count, reverse=True))
+    industry_top_outflows = tuple(
+        _rank_by_net_amount(industry_flows, candidate_count, reverse=False)
+    )
+    stock_candidates = DailyStockFlowCandidateGroups(
+        ths_top_inflows=tuple(_stock_candidates(ths_rows, "moneyflow_ths", candidate_count, True)),
+        ths_top_outflows=tuple(
+            _stock_candidates(ths_rows, "moneyflow_ths", candidate_count, False)
+        ),
+        dc_top_inflows=tuple(_stock_candidates(dc_rows, "moneyflow_dc", candidate_count, True)),
+        dc_top_outflows=tuple(_stock_candidates(dc_rows, "moneyflow_dc", candidate_count, False)),
+        strongest_limit_events=tuple(_strongest_limit_events(limit_rows, candidate_count)),
+        most_opened_limit_events=tuple(_most_opened_limit_events(limit_rows, candidate_count)),
+    )
     return DailySentimentFlowSnapshot(
         trade_date=trade_date,
         technical_context=technical_context,
-        market_flow=DailyMarketFlowSnapshot(
-            hsgt_history=tuple(
-                item
-                for row in _sorted_by_date(_items(datasets, "sentiment_hsgt_flow"))
-                if (item := _hsgt_point(row)) is not None
-            ),
-            market_moneyflow_dc=_market_flow(
-                _latest_row(_items(datasets, "sentiment_market_flow_dc"))
-            ),
-            margin_markets=tuple(
-                item
-                for label in ("sentiment_margin_sse", "sentiment_margin_szse")
-                for row in _items(datasets, label)
-                if (item := _margin_flow(row)) is not None
-            ),
-        ),
-        industry_top_inflows=tuple(
-            _rank_by_net_amount(industry_flows, candidate_count, reverse=True)
-        ),
-        industry_top_outflows=tuple(
-            _rank_by_net_amount(industry_flows, candidate_count, reverse=False)
-        ),
-        stock_candidates=DailyStockFlowCandidateGroups(
-            ths_top_inflows=tuple(
-                _stock_candidates(ths_rows, "moneyflow_ths", candidate_count, True)
-            ),
-            ths_top_outflows=tuple(
-                _stock_candidates(ths_rows, "moneyflow_ths", candidate_count, False)
-            ),
-            dc_top_inflows=tuple(_stock_candidates(dc_rows, "moneyflow_dc", candidate_count, True)),
-            dc_top_outflows=tuple(
-                _stock_candidates(dc_rows, "moneyflow_dc", candidate_count, False)
-            ),
-            strongest_limit_events=tuple(_strongest_limit_events(limit_rows, candidate_count)),
-            most_opened_limit_events=tuple(_most_opened_limit_events(limit_rows, candidate_count)),
+        market_flow=market_flow,
+        industry_top_inflows=industry_top_inflows,
+        industry_top_outflows=industry_top_outflows,
+        stock_candidates=stock_candidates,
+        authorized_targets=_authorized_targets(
+            technical_context,
+            industry_top_inflows,
+            industry_top_outflows,
+            stock_candidates,
         ),
         coverage=DailySentimentFlowCoverage(
             source_dataset_count=source_dataset_count,
@@ -330,6 +335,49 @@ def _aggregate_snapshot(
             industry_flow_count=len(industry_rows),
             limit_event_count=len(limit_rows),
         ),
+    )
+
+
+def _authorized_targets(
+    technical_context: DailyTechnicalSnapshot,
+    industry_top_inflows: tuple[IndustryFlowSnapshot, ...],
+    industry_top_outflows: tuple[IndustryFlowSnapshot, ...],
+    stock_candidates: DailyStockFlowCandidateGroups,
+) -> tuple[ResearchTarget, ...]:
+    """显式列出快照可直接支持的标的，避免 Agent 与校验器各自猜字段。"""
+
+    targets: dict[tuple[TargetType, str], ResearchTarget] = {}
+
+    def authorize(target_type: TargetType, code: str, name: str) -> None:
+        normalized = code.strip().upper()
+        if not normalized:
+            return
+        targets.setdefault(
+            (target_type, normalized),
+            ResearchTarget(type=target_type, code=normalized, name=name.strip() or normalized),
+        )
+
+    authorize(TargetType.MARKET, "A_SHARE", "A股市场")
+    for item in technical_context.market_indices:
+        authorize(TargetType.MARKET, item.ts_code, item.name)
+    for item in technical_context.benchmarks:
+        authorize(TargetType.MARKET, item.index_code, item.index_name)
+    for item in technical_context.industries:
+        authorize(TargetType.SECTOR, item.index_code, item.industry_name)
+    for rows in technical_context.candidates.model_dump().values():
+        for item in rows:
+            authorize(TargetType.STOCK, str(item["ts_code"]), str(item["name"]))
+    for item in (*industry_top_inflows, *industry_top_outflows):
+        authorize(TargetType.SECTOR, item.ts_code, item.industry)
+    for rows in stock_candidates.model_dump().values():
+        for item in rows:
+            authorize(TargetType.STOCK, str(item["ts_code"]), str(item["name"]))
+
+    return tuple(
+        sorted(
+            targets.values(),
+            key=lambda item: (item.type.value, item.code),
+        )
     )
 
 

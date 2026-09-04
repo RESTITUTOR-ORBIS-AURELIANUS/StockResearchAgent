@@ -702,8 +702,10 @@ def _period_validation_error(
     if parsed_report is not None and parsed_report > as_of_date:
         return "report_period 晚于 as_of"
     if allowed_report_range is not None and parsed_report is not None:
-        if not allowed_report_range.start <= parsed_report <= allowed_report_range.end:
-            return "report_period 不在 ResearchRequest.time_range 内"
+        # ResearchRequest.time_range 约束“可搜索到何时”，而财报报告期天然可能
+        # 早于这个新闻/事件窗口；这里只拒绝未来于窗口结束日的报告期。
+        if parsed_report > allowed_report_range.end:
+            return "report_period 晚于 ResearchRequest.time_range.end"
     if parsed_comparison is not None and parsed_comparison > as_of_date:
         return "comparison_period 晚于 as_of"
     if parsed_report is not None and parsed_comparison is not None:
@@ -777,14 +779,15 @@ async def _execute_task(
         )
         if existing is not None:
             continue
-        observations.append(
-            await _call_observation(
-                tools_by_name[tool_name],
-                call_id=f"fc_r{round_number}_{position}_{call_suffix}",
-                task_id=task.task_id,
-                arguments=arguments,
-            )
+        observation = await _call_observation(
+            tools_by_name[tool_name],
+            call_id=f"fc_r{round_number}_{position}_{call_suffix}",
+            task_id=task.task_id,
+            arguments=arguments,
         )
+        observations.append(observation)
+        if error := _uncitable_observation_error(observation, target_code=task.target.code):
+            errors.append(error)
         invocation_count += 1
     return observations, errors, invocation_count
 
@@ -936,6 +939,22 @@ async def _invoke_tool(tool: BaseTool, arguments: dict[str, Any]) -> dict[str, A
         "issues": [{"code": "INTERNAL_ERROR", "message": "Tool 返回值不是对象"}],
         "complete": False,
     }
+
+
+def _uncitable_observation_error(
+    observation: FundamentalToolObservation,
+    *,
+    target_code: str,
+) -> str | None:
+    """把不可引用的 Tool 结果记入诊断；empty/partial 仍保留其业务语义。"""
+
+    status = str(observation.result.get("status") or "unknown")
+    if status in _EVIDENCE_CITABLE_STATUSES:
+        return None
+    return (
+        f"基本面 Tool 结果不可用于证据：target={target_code} "
+        f"tool={observation.tool_name} status={status}"
+    )
 
 
 def _find_observation(

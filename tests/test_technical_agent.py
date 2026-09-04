@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import date, datetime
+from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -24,6 +25,10 @@ from stock_research_agent.agents.technical.models import (
     VerificationReviewDecision,
 )
 from stock_research_agent.agents.technical.prompts import DAILY_ANALYSIS_SYSTEM_PROMPT
+from stock_research_agent.agents.technical.subgraph import (
+    _resolve_external_sector_proxy,
+    _select_sw_sector_proxy,
+)
 from stock_research_agent.config import LLMSettings
 from stock_research_agent.domain import ResearchRequest, ResearchTarget, TimeRange
 from stock_research_agent.domain.enums import (
@@ -71,7 +76,7 @@ def test_default_technical_limits_cap_each_verification_round_at_three_targets()
 
     assert limits.daily_candidate_count == 6
     assert limits.max_requests_per_round == 3
-    assert limits.max_total_tool_calls == 24
+    assert limits.max_total_tool_calls == 40
 
 
 class NoopProvider:
@@ -420,6 +425,60 @@ def test_technical_request_enforces_instrument_kind_including_sw_index() -> None
     assert fund_request.instrument_kind is TechnicalInstrumentKind.FUND
 
 
+def test_ths_sector_target_maps_to_unique_same_name_sw_l1_proxy() -> None:
+    external = ResearchTarget(type=TargetType.SECTOR, code="881155.TI", name="银行")
+
+    proxy = _select_sw_sector_proxy(
+        [
+            {"index_code": "801780.SI", "industry_name": "银行", "level": "L1"},
+            {"index_code": "850111.SI", "industry_name": "银行", "level": "L2"},
+            {"index_code": "801080.SI", "industry_name": "电子", "level": "L1"},
+        ],
+        external,
+    )
+
+    assert proxy == ResearchTarget(type=TargetType.SECTOR, code="801780.SI", name="银行")
+
+
+def test_external_sector_research_request_is_rewritten_only_for_technical_execution() -> None:
+    async def scenario() -> None:
+        external = ResearchTarget(type=TargetType.SECTOR, code="881155.TI", name="银行")
+        request = ResearchRequest(
+            **{
+                **make_research_request("rq_technical_ths_sector").model_dump(mode="python"),
+                "target": external,
+            }
+        )
+
+        class InstrumentReference:
+            async def get_industry_classifications(self, **_kwargs):
+                return SimpleNamespace(
+                    items=[
+                        {
+                            "index_code": "801780.SI",
+                            "industry_name": "银行",
+                            "level": "L1",
+                        }
+                    ]
+                )
+
+        context = SimpleNamespace(
+            services=SimpleNamespace(instrument_reference=InstrumentReference())
+        )
+        planning_request, proxy, error = await _resolve_external_sector_proxy(
+            request,
+            tool_context=context,
+            as_of=AS_OF,
+        )
+
+        assert error is None
+        assert request.target == external
+        assert proxy == ResearchTarget(type=TargetType.SECTOR, code="801780.SI", name="银行")
+        assert planning_request.target == proxy
+
+    asyncio.run(scenario())
+
+
 def test_abstract_a_share_index_request_is_accepted_for_deterministic_proxy_mapping() -> None:
     request = TechnicalVerificationRequestDraft(
         target=MARKET_TARGET,
@@ -476,15 +535,10 @@ def test_targeted_a_share_request_executes_real_market_index_proxy() -> None:
 
         assert calls == ["get_index_market_context", "calculate_return_and_trend"]
         target_observation = next(
-            item
-            for item in result["observations"]
-            if item.tool_name == "get_index_market_context"
+            item for item in result["observations"] if item.tool_name == "get_index_market_context"
         )
         assert target_observation.arguments["ts_code"] == "000300.SH"
-        assert (
-            result["completed_research_request"].status
-            is ResearchRequestStatus.NO_NEW_EVIDENCE
-        )
+        assert result["completed_research_request"].status is ResearchRequestStatus.NO_NEW_EVIDENCE
 
     asyncio.run(scenario())
 
@@ -750,7 +804,7 @@ def test_too_large_context_can_be_calculated_but_not_cited_as_evidence() -> None
     asyncio.run(scenario())
 
 
-def test_relative_strength_benchmark_cannot_become_evidence_target() -> None:
+def test_relative_strength_explicit_benchmark_can_become_evidence_target() -> None:
     async def scenario() -> None:
         context, tools, _ = await fake_tool_runtime()
         request = make_research_request("rq_technical_relative_subject")
@@ -779,12 +833,12 @@ def test_relative_strength_benchmark_cannot_become_evidence_target() -> None:
             ),
             reviews=(
                 VerificationReviewDecision(
-                    review_summary="模型错误地把基准当成了证据主体。",
+                    review_summary="相对强弱结果明确包含目标和基准两个可追溯主体。",
                     evidence=(
                         TechnicalEvidenceDraft(
                             target=benchmark_target,
-                            title="错误的基准主体证据",
-                            description="相对强弱计算的主体应当是股票，不是比较基准。",
+                            title="沪深300是该次相对强弱计算的明确基准",
+                            description="相对强弱结果直接返回了沪深300对应的基准区间表现。",
                             source_call_ids=("tc_r1_1_relative_strength",),
                         ),
                     ),
@@ -795,8 +849,8 @@ def test_relative_strength_benchmark_cannot_become_evidence_target() -> None:
 
         result = await graph.ainvoke(verification_input(request))
 
-        assert result["evidence_records"] == []
-        assert result["run_summary"].rejected_evidence_count == 1
+        assert [item.target for item in result["evidence_records"]] == [benchmark_target]
+        assert result["run_summary"].rejected_evidence_count == 0
 
     asyncio.run(scenario())
 

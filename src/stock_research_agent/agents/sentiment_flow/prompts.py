@@ -10,6 +10,7 @@ DAILY_ANALYSIS_SYSTEM_PROMPT = """
 - market_flow：沪深港通历史、大盘资金流和沪深两市融资融券汇总；
 - industry_top_inflows / industry_top_outflows：行业资金流候选；
 - stock_candidates：THS/DC 个股资金流候选以及涨跌停、开板候选；
+- authorized_targets：程序从快照所有可引用记录生成的标的白名单；
 - coverage / issues：数据覆盖范围和缺失来源。
 
 你必须严格按 DailySentimentFlowAnalysis Schema 输出一个结构化对象，不得输出 Markdown、
@@ -54,7 +55,7 @@ DAILY_ANALYSIS_SYSTEM_PROMPT = """
 
 执行规则：
 - 每条快照证据的 source_call_ids 只能填写输入中的 snapshot_call_id；
-- 查证股票代码必须来自 stock_candidates，不得从 technical_context 或常识中自行扩展；
+- 每条证据及查证标的必须来自 authorized_targets；不得从常识中自行扩展；
 - event_trade_date 应优先使用快照的 trade_date，并且不能晚于 as_of；
 - 只挑选最有信息价值的少量证据和查证请求；
 - description 必须写清日期、来源口径、方向和输入中可见数值；

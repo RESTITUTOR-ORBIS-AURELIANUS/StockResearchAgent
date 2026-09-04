@@ -162,6 +162,11 @@ UNUSUAL_TRADING    -> get_unusual_trading_activity
 - `ok` 可正常引用；`partial` 只引用成功数据集并披露缺失；
 - `empty` 只支持“精确接口和窗口内无记录”；`error/too_large` 不能用作证据。
 
+每日快照显式携带 `authorized_targets`，它由技术背景、行业资金候选、个股资金候选和涨跌停候选
+确定性合并而成。Prompt 与子图校验器读取同一份清单，避免“快照里已有标的，但校验器漏扫嵌套
+字段”造成误拒绝。单个定向 Tool 的 `error/too_large` 会进入运行诊断但不会成为来源；已有其他合法
+证据时阶段仍可完成，最终无证据时才按失败处理。
+
 ## 7. 循环与预算
 
 | 限制 | 默认值 |
@@ -169,8 +174,8 @@ UNUSUAL_TRADING    -> get_unusual_trading_activity
 | 每个快照候选组数量 | 10 |
 | 查证轮数 | 2 |
 | 每轮最多请求 | 4 |
-| 子图总 Tool 调用 | 12 |
-| 主图情绪资金 `ResearchRequest` | 12 |
+| 子图总 Tool 调用 | 24 |
+| 主图情绪资金 `ResearchRequest` | 20 |
 
 相同标的、查证维度、窗口和事件日期会按指纹去重。第二轮只能研究第一轮已授权的股票。
 预算是程序硬限制，不依赖 Prompt 自觉。技术和情绪资金两个主图阶段使用独立请求计数，

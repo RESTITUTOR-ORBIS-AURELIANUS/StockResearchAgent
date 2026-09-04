@@ -491,6 +491,27 @@ def _daily_snapshot_permissions(
         evidence_targets[scope_target.code] = {scope_target.type}
     stock_targets: dict[str, set[TargetType]] = {}
 
+    manifest = snapshot.get("authorized_targets")
+    if isinstance(manifest, list) and manifest:
+        for item in manifest:
+            if not isinstance(item, dict):
+                continue
+            code = item.get("code")
+            target_type = item.get("type")
+            if not isinstance(code, str) or not code:
+                continue
+            try:
+                normalized_type = TargetType(target_type)
+            except (TypeError, ValueError):
+                continue
+            normalized_code = code.upper()
+            evidence_targets.setdefault(normalized_code, set()).add(normalized_type)
+            if normalized_type is TargetType.STOCK:
+                stock_targets.setdefault(normalized_code, set()).add(TargetType.STOCK)
+        return evidence_targets, stock_targets
+
+    # Backward-compatible fallback for persisted or scripted snapshots created before
+    # authorized_targets became part of the Tool contract.
     for group_name in ("industry_top_inflows", "industry_top_outflows"):
         for item in snapshot.get(group_name, []):
             code = item.get("ts_code")
@@ -666,14 +687,15 @@ async def _execute_task(
         )
         if existing is not None:
             continue
-        observations.append(
-            await _call_observation(
-                tools_by_name[tool_name],
-                call_id=f"sfc_r{round_number}_{position}_{check.value.lower()}",
-                task_id=task.task_id,
-                arguments=arguments,
-            )
+        observation = await _call_observation(
+            tools_by_name[tool_name],
+            call_id=f"sfc_r{round_number}_{position}_{check.value.lower()}",
+            task_id=task.task_id,
+            arguments=arguments,
         )
+        observations.append(observation)
+        if error := _uncitable_observation_error(observation, target_code=task.target.code):
+            errors.append(error)
         invocation_count += 1
     return observations, errors, invocation_count
 
@@ -738,6 +760,22 @@ async def _invoke_tool(tool: BaseTool, arguments: dict[str, Any]) -> dict[str, A
         "issues": [{"code": "INTERNAL_ERROR", "message": "Tool 返回值不是对象"}],
         "complete": False,
     }
+
+
+def _uncitable_observation_error(
+    observation: SentimentFlowToolObservation,
+    *,
+    target_code: str,
+) -> str | None:
+    """把不可引用的 Tool 结果记入诊断；empty/partial 仍保留其业务语义。"""
+
+    status = str(observation.result.get("status") or "unknown")
+    if status in _EVIDENCE_CITABLE_STATUSES:
+        return None
+    return (
+        f"情绪资金 Tool 结果不可用于证据：target={target_code} "
+        f"tool={observation.tool_name} status={status}"
+    )
 
 
 def _find_observation(

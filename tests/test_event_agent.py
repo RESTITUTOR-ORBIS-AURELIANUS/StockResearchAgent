@@ -15,6 +15,11 @@ from stock_research_agent.agents.event import (
     EventResearchMode,
     build_event_agent_graph,
 )
+from stock_research_agent.agents.event.model import (
+    _collect_record_keys,
+    _event_json_schema,
+    _validate_event_references,
+)
 from stock_research_agent.agents.event.models import (
     DailyEventAnalysis,
     EventEvidenceDraft,
@@ -68,6 +73,13 @@ STOCK_TARGET = ResearchTarget(type=TargetType.STOCK, code="000001.SZ", name="平
 OTHER_STOCK = ResearchTarget(type=TargetType.STOCK, code="000002.SZ", name="万科A")
 
 
+def test_default_event_limits_allow_deeper_tool_research() -> None:
+    limits = EventAgentLimits()
+
+    assert limits.max_verification_rounds == 2
+    assert limits.max_total_tool_calls == 32
+
+
 class NoopProvider:
     async def query(self, request):  # pragma: no cover - fake Tools bypass provider
         raise AssertionError(f"unexpected provider call: {request.api_name}")
@@ -105,6 +117,69 @@ class ScriptedEventModel:
     async def review_verification(self, request):
         assert request.observations
         return self.reviews.pop(0)
+
+
+def test_event_dynamic_schema_restricts_snapshot_targets_calls_and_record_keys() -> None:
+    allowed_calls = frozenset({"ec_daily_snapshot_1"})
+    allowed_keys = frozenset({"news:stock:1"})
+    allowed_targets = frozenset({"A_SHARE", STOCK_TARGET.code})
+    schema = _event_json_schema(
+        DailyEventAnalysis,
+        allowed_call_ids=allowed_calls,
+        allowed_record_keys=allowed_keys,
+        allowed_target_codes=allowed_targets,
+    )
+
+    evidence_schema = schema["$defs"]["EventEvidenceDraft"]["properties"]
+    assert evidence_schema["source_call_ids"]["items"]["enum"] == [
+        "ec_daily_snapshot_1"
+    ]
+    assert evidence_schema["source_record_keys"]["items"]["enum"] == [
+        "news:stock:1"
+    ]
+    assert set(schema["$defs"]["ResearchTarget"]["properties"]["code"]["enum"]) == set(
+        allowed_targets
+    )
+
+    valid = DailyEventAnalysis(
+        market_summary="只引用快照内事实。",
+        snapshot_evidence=(
+            EventEvidenceDraft(
+                target=STOCK_TARGET,
+                title="快照内事件",
+                description="来源直接报道该事件。",
+                source_call_ids=("ec_daily_snapshot_1",),
+                source_record_keys=("news:stock:1",),
+            ),
+        ),
+    )
+    assert (
+        _validate_event_references(
+            valid,
+            allowed_call_ids=allowed_calls,
+            allowed_record_keys=allowed_keys,
+            allowed_target_codes=allowed_targets,
+        )
+        is valid
+    )
+    assert _collect_record_keys({"nested": [{"record_key": "news:stock:1"}]}) == allowed_keys
+
+    invalid = valid.model_copy(
+        update={
+            "snapshot_evidence": (
+                valid.snapshot_evidence[0].model_copy(
+                    update={"source_record_keys": ("invented:key",)}
+                ),
+            )
+        }
+    )
+    with pytest.raises(ValueError, match="invented:key"):
+        _validate_event_references(
+            invalid,
+            allowed_call_ids=allowed_calls,
+            allowed_record_keys=allowed_keys,
+            allowed_target_codes=allowed_targets,
+        )
 
 
 def test_daily_news_can_form_direct_stock_evidence_with_row_level_source() -> None:

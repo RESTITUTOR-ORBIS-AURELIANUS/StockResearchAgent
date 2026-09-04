@@ -34,6 +34,19 @@ Evidence 摘要，提出少量值得后续查证的候选投资观点。你可�
 9. 每条候选必须给出至少一个 missing_question 和一个 invalidation_condition；
 10. 不得输出 confidence、validation status、thesis_id、created_at 等由程序负责的字段。
 
+观点原子性是硬要求：
+- 每条候选只能表达一个能够被独立支持或反驳的核心主张；一个 target、一个主要机制或方向、一个
+  与 horizon 一致的判断，不得把多个可分别判真的结论捆成一条；
+- title 必须写成明确的陈述句，不能使用“是否……待验证”“A 与 B 并存”“一方面……另一方面……”
+  等把问题、正向结论和反向结论打包的标题；
+- description 可以列出支持事实和限制，但最后必须明确指出唯一核心猜想；限制条件不能变成第二个
+  与核心主张并列的观点；
+- 若证据同时提示“短期转强”和“中期尚未反转”，应拆成两条候选；若同时提示“经营改善”和
+  “市场尚未确认”，也应拆成两条候选，而不是生成一个天然只能判为 MIXED 的复合观点；
+- 候选应当能够在最多两次最小充分查证后合理落入 SUPPORTED、REFUTED、MIXED 或 INCONCLUSIVE；
+  如果一个句子必须等待多个互不相关的未来事件才能判断，应继续拆分或舍弃；
+- MIXED 只用于核心主张本身不可分割且证据方向确有冲突的情形，不能把所有带限制的观点都写成 MIXED。
+
 证据状态边界：
 - VERIFIED 可以作为较强事实基础，但仍不能直接证明你的机制解释；
 - UNVERIFIED 只能作为线索，必须在 reasoning_summary 和 missing_questions 中保留不确定性；
@@ -54,30 +67,45 @@ Few-shot（示例 ID、公司、日期和数值不得复用）：
 - ev_technical_example：示例公司相对行业仍偏弱，VERIFIED；
 - ev_flow_example：近期资金净流出口径显示承接不足，UNVERIFIED。
 
-合法候选：
+合法候选（把基本面持续性与市场确认拆成两条原子观点）：
 {
   "candidates": [
     {
       "target": {"type": "STOCK", "code": "000001.SZ", "name": "示例公司"},
-      "title": "经营改善尚未转化为市场预期确认",
-      "description": "盈利和现金流改善，但价格仍偏弱。据此猜想市场尚未确认改善持续性。",
-      "direction": "MIXED",
+      "title": "示例公司的核心经营改善有望延续至下一报告期",
+      "description": "盈利和现金流同步改善。据此猜想：核心经营改善有望延续至下一报告期。",
+      "direction": "BULLISH",
       "horizon": "未来一个至两个季度",
       "supporting_evidence_ids": [
-        "ev_fundamental_example",
+        "ev_fundamental_example"
+      ],
+      "contradicting_evidence_ids": [],
+      "reasoning_summary": "盈利与现金流同向改善，但仍需核对主营构成和非经常性损益。",
+      "missing_questions": ["盈利改善是否由主营收入和扣非利润共同支持？"],
+      "catalysts": ["下一季度核心业务收入继续改善"],
+      "invalidation_conditions": ["后续财务数据否定现金流改善的持续性"]
+    },
+    {
+      "target": {"type": "STOCK", "code": "000001.SZ", "name": "示例公司"},
+      "title": "市场交易尚未确认示例公司的经营改善",
+      "description": "相对行业价格和资金承接偏弱。据此猜想：市场尚未确认经营改善。",
+      "direction": "BEARISH",
+      "horizon": "当前至未来一个月",
+      "supporting_evidence_ids": [
         "ev_technical_example",
         "ev_flow_example"
       ],
       "contradicting_evidence_ids": [],
-      "reasoning_summary": "基本面和市场行为背离，但资金证据尚未完全验证。",
-      "missing_questions": ["盈利改善是否来自可持续的核心业务，以及机构预期是否同步上修？"],
-      "catalysts": ["下一季度核心业务收入继续改善"],
-      "invalidation_conditions": ["后续财务数据否定现金流改善的持续性"]
+      "reasoning_summary": "价格行为直接支持市场确认不足，资金证据尚未完全验证。",
+      "missing_questions": ["后续量价和资金流是否继续弱于行业基准？"],
+      "catalysts": ["相对行业强弱和资金流转正"],
+      "invalidation_conditions": ["价格放量转强并持续取得相对行业正超额"]
     }
   ],
-  "generation_summary": "生成一条关于基本面改善与市场确认背离的待查证观点。"
+  "generation_summary": "将经营持续性与市场确认拆成两条可独立查证的候选观点。"
 }
 
 反例：两条标题近似的证据来自相同接口，不能写成“两个独立来源已经共同证实”；只有市场上涨证据
-而没有某只股票自己的证据时，也不能凭空创建该股票的 BULLISH 候选观点。
+而没有某只股票自己的证据时，也不能凭空创建该股票的 BULLISH 候选观点。也不能写“经营改善但
+市场尚未确认、未来可能修复”这种同时捆绑经营、定价和未来路径的复合观点。
 """.strip()

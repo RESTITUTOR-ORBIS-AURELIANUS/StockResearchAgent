@@ -12,12 +12,18 @@ from stock_research_agent.agents.fundamental import (
     FundamentalResearchMode,
     build_fundamental_agent_graph,
 )
+from stock_research_agent.agents.fundamental.model import (
+    _normalize_request_periods,
+    _review_json_schema,
+    _validate_review_call_ids,
+)
 from stock_research_agent.agents.fundamental.models import (
     DailyFundamentalAnalysis,
     FundamentalAgentRunSummary,
     FundamentalCheck,
     FundamentalEvidenceDraft,
     FundamentalReviewDecision,
+    FundamentalToolObservation,
     FundamentalVerificationRequestDraft,
     TargetedFundamentalPlan,
 )
@@ -25,6 +31,10 @@ from stock_research_agent.agents.fundamental.prompts import (
     DAILY_ANALYSIS_SYSTEM_PROMPT,
     TARGETED_PLANNING_SYSTEM_PROMPT,
     VERIFICATION_REVIEW_SYSTEM_PROMPT,
+)
+from stock_research_agent.agents.fundamental.subgraph import _period_validation_error
+from stock_research_agent.agents.fundamental.subgraph import (
+    _uncitable_observation_error as _fundamental_observation_error,
 )
 from stock_research_agent.agents.sentiment_flow.models import (
     SentimentFlowAgentRunSummary,
@@ -110,6 +120,123 @@ class ScriptedFundamentalModel:
         self.review_calls += 1
         assert request.observations
         return self.reviews.pop(0)
+
+
+def test_default_limits_leave_room_for_two_round_fundamental_verification() -> None:
+    limits = FundamentalAgentLimits()
+
+    assert limits.max_verification_rounds == 2
+    assert limits.max_requests_per_round == 4
+    assert limits.max_total_tool_calls == 48
+
+
+def test_missing_or_future_fundamental_period_is_normalized_before_schema_validation() -> None:
+    payload = {
+        "verification_requests": [
+            {
+                "target": STOCK_TARGET.model_dump(mode="json"),
+                "checks": ["FINANCIAL_STATEMENTS"],
+                "report_period": "20260930",
+                "comparison_period": "20241231",
+            }
+        ]
+    }
+
+    normalized = _normalize_request_periods(
+        payload,
+        field_name="verification_requests",
+        cutoff=AS_OF.date(),
+        periods_by_target={},
+    )
+
+    request = normalized["verification_requests"][0]
+    assert request["report_period"] == "20260630"
+    assert request["comparison_period"] == "20250630"
+
+
+def test_financial_report_period_may_precede_research_observation_window() -> None:
+    request = FundamentalVerificationRequestDraft(
+        target=STOCK_TARGET,
+        question="近期信息是否得到最近财报支持？",
+        requested_evidence="查询观察窗口开始前已经结束的最近季度。",
+        checks=(FundamentalCheck.FINANCIAL_STATEMENTS,),
+        report_period="20260630",
+        reason="财报报告期与资料观察窗口不是同一时间语义。",
+    )
+
+    error = _period_validation_error(
+        request,
+        as_of_date=AS_OF.date(),
+        daily_report_period=None,
+        daily_comparison_period=None,
+        allowed_report_range=TimeRange(start=date(2026, 8, 1), end=AS_OF.date()),
+    )
+
+    assert error is None
+
+
+def test_review_schema_uses_only_real_tool_call_ids() -> None:
+    allowed = frozenset(
+        {
+            "fc_r1_1_financial_statements_current",
+            "fc_r1_1_financial_statements_comparison",
+        }
+    )
+    schema = _review_json_schema(allowed)
+    source_ids = schema["$defs"]["FundamentalEvidenceDraft"]["properties"]["source_call_ids"]
+
+    assert source_ids["items"]["enum"] == sorted(allowed)
+    valid = FundamentalReviewDecision(
+        review_summary="引用真实调用。",
+        evidence=(
+            FundamentalEvidenceDraft(
+                target=STOCK_TARGET,
+                title="真实调用证据",
+                description="来自本轮实际工具调用。",
+                source_call_ids=("fc_r1_1_financial_statements_current",),
+            ),
+        ),
+    )
+    assert _validate_review_call_ids(valid, allowed) is valid
+
+    invalid = FundamentalReviewDecision(
+        review_summary="模型改写了调用编号。",
+        evidence=(
+            FundamentalEvidenceDraft(
+                target=STOCK_TARGET,
+                title="错误调用编号",
+                description="编号不存在。",
+                source_call_ids=("fcr1_fabricated",),
+            ),
+        ),
+    )
+    with pytest.raises(ValueError, match="fcr1_fabricated"):
+        _validate_review_call_ids(invalid, allowed)
+
+
+@pytest.mark.parametrize("status", ["ok", "partial", "empty"])
+def test_fundamental_observation_semantics_keep_citable_statuses(status: str) -> None:
+    observation = FundamentalToolObservation(
+        call_id="fc_r1_1_test",
+        tool_name="get_financial_statements",
+        arguments={"ts_code": STOCK_TARGET.code},
+        result={"status": status},
+    )
+
+    assert _fundamental_observation_error(observation, target_code=STOCK_TARGET.code) is None
+
+
+def test_fundamental_observation_semantics_report_error_without_citing_it() -> None:
+    observation = FundamentalToolObservation(
+        call_id="fc_r1_1_test",
+        tool_name="get_financial_statements",
+        arguments={"ts_code": STOCK_TARGET.code},
+        result={"status": "error"},
+    )
+
+    message = _fundamental_observation_error(observation, target_code=STOCK_TARGET.code)
+    assert message is not None
+    assert "status=error" in message
 
 
 def test_daily_mode_builds_market_sector_and_verified_stock_evidence() -> None:
@@ -584,7 +711,7 @@ def test_returned_report_period_must_match_tool_arguments() -> None:
     asyncio.run(scenario())
 
 
-def test_report_period_must_be_inside_research_request_range() -> None:
+def test_report_period_cannot_be_later_than_research_request_end() -> None:
     async def scenario() -> None:
         context, tools, calls, _ = await fake_tool_runtime()
         historical_request = ResearchRequest(

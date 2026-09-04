@@ -279,7 +279,7 @@ class TechnicalAgentLimits:
     max_verification_rounds: int = 2
     # 每日模式只深入最值得查证的三个目标，控制 Tool 数量和复核 Prompt 规模。
     max_requests_per_round: int = 3
-    max_total_tool_calls: int = 24
+    max_total_tool_calls: int = 40
 
     def __post_init__(self) -> None:
         if not 3 <= self.daily_candidate_count <= 20:

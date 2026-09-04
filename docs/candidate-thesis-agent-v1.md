@@ -19,6 +19,11 @@
 - 引用输入中不存在的 `evidence_id`；
 - 只凭市场/行业证据创建没有股票自身证据的股票观点。
 
+每条候选必须是原子观点：只包含一个能够独立支持或反驳的核心主张。类似“短期转强但中期尚未
+反转”“经营改善但市场仍未确认”的两个可分离判断必须拆成两条观点；标题不能写成问题或把正反
+结论打包。这样后续查证者可以分别给出 `SUPPORTED/REFUTED`，而不会因为句子天然包含两面而只能
+判为 `MIXED`。
+
 ## 2. 当前主图位置
 
 ```text
@@ -88,13 +93,13 @@ Provider 和接口。模型不会收到完整 `SourceReference` 或原始行情/
   "candidates": [
     {
       "target": {"type": "STOCK", "code": "000001.SZ", "name": "平安银行"},
-      "title": "经营改善尚未得到市场行为确认",
-      "description": "事实显示经营改善但资金偏弱，据此猜想市场仍怀疑改善持续性。",
-      "direction": "MIXED",
+      "title": "核心经营改善有望延续至下一报告期",
+      "description": "盈利和经营现金流同步改善。据此提出唯一猜想：核心经营改善有望延续至下一报告期。",
+      "direction": "BULLISH",
       "horizon": "未来一个至两个季度",
-      "supporting_evidence_ids": ["ev_fundamental_001", "ev_technical_001"],
-      "contradicting_evidence_ids": ["ev_flow_001"],
-      "reasoning_summary": "基本面和市场行为之间存在需要解释的背离。",
+      "supporting_evidence_ids": ["ev_fundamental_001"],
+      "contradicting_evidence_ids": [],
+      "reasoning_summary": "盈利和现金流同向改善为持续性猜想提供基础。",
       "missing_questions": ["盈利改善是否来自可持续核心业务？"],
       "catalysts": ["下一季度核心收入继续增长"],
       "invalidation_conditions": ["经营现金流重新转负"]

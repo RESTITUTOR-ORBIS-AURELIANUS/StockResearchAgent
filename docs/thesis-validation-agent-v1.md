@@ -118,10 +118,10 @@ flowchart TD
 
 | 限制 | 默认值 |
 |---|---:|
-| 单观点补证请求 | 3 |
-| 验证阶段全局补证请求 | 12 |
-| 每轮新观点 | 2 |
-| 全运行审查员发现的新观点 | 8 |
+| 单观点补证请求 | 2 |
+| 验证阶段全局补证请求 | 20 |
+| 每轮新观点 | 1 |
+| 全运行审查员发现的新观点 | 2 |
 | 单次连续上下文字符数 | 120000 |
 
 预算计数使用独立的 `validation_research_request_count`，不会被四位证据研究员每日阶段自己的内部查证
@@ -134,7 +134,7 @@ flowchart TD
 
 共享状态中的 `token_budget_remaining` 和 `time_budget_remaining_seconds` 目前仍是全局工作流骨架字段，
 尚未按模型用量或墙钟时间扣减。统一 LLM 观测层会在上游提供时记录每次调用的 token、reasoning token、
-耗时和 `finish_reason`，但这些指标当前只用于诊断，不参与 3/12 次数预算或工作流截止判断。
+耗时和 `finish_reason`，但这些指标当前只用于诊断，不参与 2/20 次数预算或工作流截止判断。
 
 ## 7. 最终判断的确定性复核
 
@@ -146,6 +146,11 @@ flowchart TD
 - `REFUTED` 至少有一条与观点同目标的 `VERIFIED/REVISED` 决定性反证；
 - `MIXED` 正反两侧都必须满足上述决定性条件；
 - `INCONCLUSIVE` 可以高置信度出现：这里的 confidence 是“确信当前确实无法判断”，不是上涨概率。
+
+未来预测不要求等待预测期限结束后才能得到 `SUPPORTED`。如果截至 `as_of` 的同目标
+`VERIFIED/REVISED` 证据已经在与期限匹配的关键维度上形成清晰、一致的支持链，并且没有足以动摇
+核心方向的直接反证，审查员可以把预测判为 `SUPPORTED`。该状态表示“当前证据明确支持预测”，不
+表示未来结果必然发生；一般性风险或“未来尚未发生”本身不能被当成反证。
 
 审查中发现的新解释以 `origin.type=VALIDATOR_DISCOVERY`、`UNVERIFIED` 状态追加到观点池；它不能打断
 当前观点，会在当前观点结束后按相同流程接受查证。
@@ -197,7 +202,7 @@ graph = build_research_graph(
 当前版本尚未实现 checkpoint 恢复。主图启动只接受 `target/as_of/run_id` 和用于专项测试或调度的
 预置 `research_requests`；若把上一轮的 Evidence、Thesis、Finding、错误或活动验证会话作为新输入，
 入口会直接拒绝，避免列表 reducer 把旧状态合并进新 run。Runtime 默认把 LangGraph
-`recursion_limit` 设置为 300，为四领域采集、每观点最多三轮补证、发现观点和正式协商预留
+`recursion_limit` 设置为 300，为四领域采集、每观点最多两轮补证、有限衍生观点和正式协商预留
 足够拓扑步数；部署方显式覆盖时不能低于 50。
 
 ## 10. 测试边界

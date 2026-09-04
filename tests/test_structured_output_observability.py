@@ -79,9 +79,7 @@ def test_success_records_trace_finish_reason_and_usage(tmp_path: Path) -> None:
     )
 
     result = asyncio.run(
-        observable.ainvoke(
-            [HumanMessage(content='{"run_id":"run_test","as_of":"2026-08-26"}')]
-        )
+        observable.ainvoke([HumanMessage(content='{"run_id":"run_test","as_of":"2026-08-26"}')])
     )
 
     assert result.count == 2
@@ -133,6 +131,62 @@ def test_validation_failure_is_repaired_with_field_level_diagnostics(tmp_path: P
     assert [event["status"] for event in events] == ["validation_error", "repaired"]
     assert events[0]["validation_errors"][0].startswith("count:")
     assert events[1]["repaired_from_event"] == events[0]["event_id"]
+
+
+def test_schema_override_and_post_validation_are_repaired(tmp_path: Path) -> None:
+    path = tmp_path / "llm.jsonl"
+    runnable = ScriptedRunnable(
+        [
+            _envelope(parsed=ExampleOutput(count=2), content='{"count":2}'),
+            _envelope(parsed=ExampleOutput(count=1), content='{"count":1}'),
+        ]
+    )
+    chat = RecordingChatModel(runnable)
+    schema = ExampleOutput.model_json_schema()
+    schema["properties"]["count"]["enum"] = [1]
+
+    def require_allowed_count(value: ExampleOutput) -> ExampleOutput:
+        if value.count != 1:
+            raise ValueError("count 不在本次调用动态允许值内")
+        return value
+
+    observable = build_observable_structured_output(
+        chat,
+        ExampleOutput,
+        method="json_schema",
+        operation="test.dynamic_schema",
+        options=_options(path),
+        json_schema_override=schema,
+        post_validate=require_allowed_count,
+    )
+
+    result = asyncio.run(observable.ainvoke([HumanMessage(content='{"run_id":"run_dynamic"}')]))
+
+    assert result.count == 1
+    assert chat.binding[0]["properties"]["count"]["enum"] == [1]
+    assert len(runnable.calls) == 2
+    assert "动态允许值" in runnable.calls[1][-1].content
+    events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [event["status"] for event in events] == ["validation_error", "repaired"]
+
+
+def test_pre_validation_normalizes_raw_mapping_before_pydantic(tmp_path: Path) -> None:
+    path = tmp_path / "llm.jsonl"
+    runnable = ScriptedRunnable([_envelope(parsed={"count": 0}, content='{"count":0}')])
+    observable = build_observable_structured_output(
+        RecordingChatModel(runnable),
+        ExampleOutput,
+        method="json_schema",
+        operation="test.pre_validate",
+        options=_options(path),
+        pre_validate=lambda value: {**value, "count": 1},
+    )
+
+    result = asyncio.run(observable.ainvoke([HumanMessage(content="{}")]))
+
+    assert result.count == 1
+    assert len(runnable.calls) == 1
+    assert json.loads(path.read_text(encoding="utf-8"))["status"] == "success"
 
 
 def test_exhausted_failure_has_correlation_id_and_redacts_secrets(tmp_path: Path) -> None:

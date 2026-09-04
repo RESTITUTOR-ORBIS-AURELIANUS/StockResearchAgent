@@ -100,6 +100,7 @@ def build_technical_agent_graph(
         return {
             "mode": mode,
             "research_request": research_request,
+            "technical_proxy_target": None,
             "snapshot_result": None,
             "evidence_drafts": [],
             "pending_tasks": [],
@@ -183,9 +184,7 @@ def build_technical_agent_graph(
             allowed_call_ids={snapshot_observation.call_id},
             allowed_target_types=allowed_target_types,
         )
-        normalized_requests = _resolve_abstract_market_requests(
-            decision.verification_requests
-        )
+        normalized_requests = _resolve_abstract_market_requests(decision.verification_requests)
         tasks, fingerprints, task_errors = _build_tasks(
             normalized_requests,
             origin="DAILY",
@@ -203,25 +202,30 @@ def build_technical_agent_graph(
 
     async def plan_targeted(state: TechnicalAgentState) -> TechnicalAgentState:
         research_request = state["research_request"]
+        planning_request, proxy_target, proxy_error = await _resolve_external_sector_proxy(
+            research_request,
+            tool_context=tool_context,
+            as_of=state["as_of"],
+        )
+        if proxy_error is not None:
+            return {"errors": [proxy_error]}
         try:
             plan = await model.plan_targeted(
                 TargetedPlanningInput(
                     run_id=state["run_id"],
-                    scope_target=state["target"],
+                    scope_target=planning_request.target,
                     as_of=state["as_of"],
-                    research_request=research_request,
+                    research_request=planning_request,
                 )
             )
         except Exception as exc:
             return {"errors": [f"定向技术查证计划生成失败：{describe_exception(exc)}"]}
 
-        normalized_requests = _resolve_abstract_market_requests(
-            plan.verification_requests
-        )
+        normalized_requests = _resolve_abstract_market_requests(plan.verification_requests)
         allowed_instruments = {
-            research_request.target.code: {
-                (research_request.target.type, kind)
-                for kind in _kinds_for_external_target(research_request.target)
+            planning_request.target.code: {
+                (planning_request.target.type, kind)
+                for kind in _kinds_for_external_target(planning_request.target)
             },
             **{
                 code: {(TargetType.MARKET, TechnicalInstrumentKind.INDEX)}
@@ -235,11 +239,12 @@ def build_technical_agent_graph(
             allowed_instruments=allowed_instruments,
             existing_fingerprints=set(),
             limit=configured_limits.max_requests_per_round,
-            required_primary_target=research_request.target,
+            required_primary_target=planning_request.target,
         )
         return {
             "pending_tasks": tasks,
             "seen_request_fingerprints": fingerprints,
+            "technical_proxy_target": proxy_target,
             "errors": task_errors,
         }
 
@@ -383,7 +388,7 @@ def build_technical_agent_graph(
                 rejected += 1
                 final_errors.append(f"证据草稿引用无法核验，已拒绝：{draft.title}")
             else:
-                evidence_records.append(record)
+                evidence_records.append(_restore_external_sector_target(record, state))
 
         completed_request = _complete_research_request(
             state.get("research_request"),
@@ -644,9 +649,7 @@ def _resolve_abstract_market_requests(
             and target.code == _ABSTRACT_A_SHARE_CODE
             and request.instrument_kind is TechnicalInstrumentKind.INDEX
         ):
-            target = _A_SHARE_PROXY_TARGETS[
-                abstract_position % len(_A_SHARE_PROXY_TARGETS)
-            ]
+            target = _A_SHARE_PROXY_TARGETS[abstract_position % len(_A_SHARE_PROXY_TARGETS)]
             abstract_position += 1
             annotations.append(f"A_SHARE 抽象市场目标映射为 {target.code}")
         if (
@@ -655,9 +658,7 @@ def _resolve_abstract_market_requests(
             and benchmark.target.code == _ABSTRACT_A_SHARE_CODE
         ):
             benchmark_target = next(
-                candidate
-                for candidate in _A_SHARE_PROXY_TARGETS
-                if candidate.code != target.code
+                candidate for candidate in _A_SHARE_PROXY_TARGETS if candidate.code != target.code
             )
             benchmark = TechnicalBenchmark(
                 target=benchmark_target,
@@ -680,14 +681,92 @@ def _resolve_abstract_market_requests(
     return tuple(resolved)
 
 
+async def _resolve_external_sector_proxy(
+    request: ResearchRequest,
+    *,
+    tool_context: ResearchToolContext,
+    as_of,
+) -> tuple[ResearchRequest, ResearchTarget | None, str | None]:
+    """把外部系统的同花顺行业标识映射成可查询的申万行业指数。"""
+
+    target = request.target
+    if target.type is not TargetType.SECTOR or not target.code.endswith(".TI"):
+        return request, None, None
+    try:
+        instrument_reference = tool_context.services.instrument_reference
+        classifications = await instrument_reference.get_industry_classifications(
+            src="SW2021", as_of=as_of
+        )
+    except Exception as exc:
+        return (
+            request,
+            None,
+            f"行业技术查证无法取得申万分类目录：{type(exc).__name__}",
+        )
+    proxy = _select_sw_sector_proxy(classifications.items, target)
+    if proxy is None:
+        return (
+            request,
+            None,
+            f"行业技术查证无法把 {target.code}/{target.name} 映射为唯一申万行业指数",
+        )
+    planning_request = ResearchRequest.model_validate(
+        {
+            **request.model_dump(mode="python"),
+            "target": proxy,
+        }
+    )
+    return planning_request, proxy, None
+
+
+def _select_sw_sector_proxy(
+    rows: list[dict[str, Any]],
+    target: ResearchTarget,
+) -> ResearchTarget | None:
+    normalized_name = _normalize_sector_name(target.name)
+    candidates: list[tuple[bool, str, str]] = []
+    for row in rows:
+        code = str(row.get("index_code") or "").strip().upper()
+        name = str(row.get("industry_name") or "").strip()
+        level = str(row.get("level") or "").strip().upper()
+        if not code.endswith(".SI") or _normalize_sector_name(name) != normalized_name:
+            continue
+        candidates.append((level == "L1", code, name))
+    if not candidates:
+        return None
+    preferred = [item for item in candidates if item[0]] or candidates
+    unique = {(code, name) for _, code, name in preferred}
+    if len(unique) != 1:
+        return None
+    code, name = next(iter(unique))
+    return ResearchTarget(type=TargetType.SECTOR, code=code, name=name)
+
+
+def _normalize_sector_name(value: str) -> str:
+    return re.sub(r"[\s（）()\-_/]+", "", value).casefold()
+
+
+def _restore_external_sector_target(
+    record: EvidenceRecord,
+    state: TechnicalAgentState,
+) -> EvidenceRecord:
+    request = state.get("research_request")
+    proxy = state.get("technical_proxy_target")
+    if request is None or proxy is None or record.target != proxy:
+        return record
+    original = request.target
+    description = (
+        f"{record.description}\n限制：技术行情使用同名申万行业指数 "
+        f"{proxy.code} 作为外部板块 {original.code} 的可执行代理。"
+    )
+    return record.model_copy(update={"target": original, "description": description})
+
+
 def _task_covers_primary_target(
     task: TechnicalVerificationTask,
     required: ResearchTarget,
 ) -> bool:
-    if (
-        required.type is TargetType.MARKET
-        and required.code == _ABSTRACT_A_SHARE_CODE
-    ):
+    if required.type is TargetType.MARKET and required.code == _ABSTRACT_A_SHARE_CODE:
         return (
             task.target.type is TargetType.MARKET
             and task.target.code in _FIXED_BENCHMARK_CODES
@@ -1034,11 +1113,15 @@ def _result_subject_types(result: dict[str, Any]) -> dict[str, set[TargetType]]:
     subjects = result.get("source_subjects")
     if not isinstance(subjects, (list, tuple)) or not subjects:
         return {}
-    subject = subjects[0]
-    if not isinstance(subject, dict) or not isinstance(subject.get("ts_code"), str):
-        return {}
-    code = str(subject["ts_code"])
-    return {code: _target_types_for_bundle(str(subject.get("bundle_kind", "")), code)}
+    supported: dict[str, set[TargetType]] = {}
+    for subject in subjects:
+        if not isinstance(subject, dict) or not isinstance(subject.get("ts_code"), str):
+            continue
+        code = str(subject["ts_code"])
+        supported.setdefault(code, set()).update(
+            _target_types_for_bundle(str(subject.get("bundle_kind", "")), code)
+        )
+    return supported
 
 
 def _target_types_for_bundle(bundle_kind: str, code: str) -> set[TargetType]:

@@ -194,10 +194,11 @@ class ThesisValidationSession(DomainModel):
 class ThesisValidationLimits(DomainModel):
     """跨领域观点查证的外层硬预算。"""
 
-    max_research_rounds_per_thesis: int = Field(default=3, ge=1, le=6)
-    max_research_requests_per_run: int = Field(default=12, ge=1, le=64)
-    max_discovered_candidates_per_turn: int = Field(default=2, ge=0, le=2)
-    max_discovered_candidates_per_run: int = Field(default=8, ge=0, le=32)
+    max_research_rounds_per_thesis: int = Field(default=2, ge=1, le=6)
+    # 8 条初始观点 + 最多 2 条衍生观点，各保留两次最小充分补证机会。
+    max_research_requests_per_run: int = Field(default=20, ge=1, le=64)
+    max_discovered_candidates_per_turn: int = Field(default=1, ge=0, le=1)
+    max_discovered_candidates_per_run: int = Field(default=2, ge=0, le=16)
     max_context_characters: int = Field(default=120_000, ge=1_000, le=1_000_000)
 
 
@@ -223,7 +224,7 @@ class ThesisValidationInput(DomainModel):
     used_request_fingerprints: tuple[_RequestFingerprint, ...] = Field(default=(), max_length=32)
     current_round: int = Field(ge=1)
     remaining_research_rounds: int = Field(ge=0, le=12)
-    max_discovered_candidates: int = Field(default=2, ge=0, le=2)
+    max_discovered_candidates: int = Field(default=1, ge=0, le=1)
     policy_notes: tuple[str, ...] = ()
 
     @model_validator(mode="after")
@@ -279,7 +280,7 @@ class ThesisValidationDecision(DomainModel):
     )
     research_request: ValidationResearchRequestDraft | None = None
     finalization: ThesisFinalizationDraft | None = None
-    discovered_candidates: tuple[CandidateThesisDraft, ...] = Field(default=(), max_length=2)
+    discovered_candidates: tuple[CandidateThesisDraft, ...] = Field(default=(), max_length=1)
 
     @model_validator(mode="after")
     def validate_exclusive_action(self) -> "ThesisValidationDecision":
@@ -375,7 +376,7 @@ class ThesisValidationModelOutput(DomainModel):
         RequestResearchPayload | FinalizePayload,
         Field(discriminator="action"),
     ]
-    discovered_candidates: tuple[CandidateThesisDraft, ...] = Field(default=(), max_length=2)
+    discovered_candidates: tuple[CandidateThesisDraft, ...] = Field(default=(), max_length=1)
 
     def to_domain_decision(self) -> ThesisValidationDecision:
         if isinstance(self.decision, RequestResearchPayload):

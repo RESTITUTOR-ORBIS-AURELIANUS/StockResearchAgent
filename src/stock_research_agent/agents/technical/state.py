@@ -21,6 +21,7 @@ class TechnicalAgentState(TypedDict, total=False):
     as_of: datetime
     mode: TechnicalResearchMode
     research_request: ResearchRequest | None
+    technical_proxy_target: ResearchTarget | None
 
     snapshot_result: dict[str, Any] | None
     evidence_drafts: list[TechnicalEvidenceDraft]

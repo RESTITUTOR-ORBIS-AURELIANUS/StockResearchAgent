@@ -115,6 +115,11 @@ PLEDGE_RISK          -> get_pledge_risk_context
 `report_period`；需要同比时可填写更早的 `comparison_period`。历史估值和股东人数等日期窗口会
 被程序限制在冻结的 `as_of` 与 `ResearchRequest.time_range` 内。
 
+定向计划和追问的原始 JSON 在进入 Pydantic 前会执行确定性报告期规范化：缺失、非法或晚于冻结
+窗口的 `report_period` 会落到窗口结束日前最近一个季度末；已填写但非法的同比期会改成上年同期。
+规范化结果仍须通过完整 Schema 与业务校验。`ResearchRequest.time_range` 是资料搜索/观察窗口，财报
+报告期可以早于其起点，但绝不能晚于 `time_range.end` 或 `as_of`。
+
 ## 5. 结构化输出和硬校验
 
 每日分析固定返回：
@@ -152,9 +157,14 @@ PLEDGE_RISK          -> get_pledge_risk_context
 - 只引用 `resolve_stock_identity` 的“基本面证据”；身份结果只作为执行闸门，不能证明财务事实；
 - 上游忽略 `ts_code` 过滤后返回其他股票的数据；
 - 上游实际返回的报告期或估值日期与程序请求不一致的数据；
-- 指定查证中落在 `ResearchRequest.time_range` 之外的主报告期；
+- 指定查证中晚于 `ResearchRequest.time_range.end` 的主报告期；
 - 用 `error/too_large` 支撑证据，或把 `empty` 扩写成永久性结论；
 - 第二轮换标的、重复同一请求，或绕过 Tool 调用预算。
+
+每次查证审阅前，程序会从本轮真实 observation 生成动态 JSON Schema：
+`source_call_ids.items.enum` 只包含状态为 `ok/partial/empty` 的实际调用编号，并排除只负责身份
+核对的 `resolve_stock_identity`。模型若仍改写编号，本地 post-validation 会触发一次结构化修复；
+修复后仍不合法才终止该次审阅。
 
 ## 6. 循环与预算
 
@@ -164,12 +174,15 @@ PLEDGE_RISK          -> get_pledge_risk_context
 | 近期披露回看天数 | 14 |
 | 查证轮数 | 2 |
 | 每轮最多请求 | 4 |
-| 子图总 Tool 调用 | 20 |
-| 主图基本面 `ResearchRequest` | 12 |
+| 子图总 Tool 调用 | 48 |
+| 主图基本面 `ResearchRequest` | 20 |
 
 身份核对和每个具体业务 Tool 都计入预算。跨期报表、质量或业绩检查会展开为本期与同期两次调用；
 同一轮相同股票、Tool 和参数只预留并执行一次。程序在执行任务前预留整个任务所需预算，避免只完成
 半个任务后再被截断。
+
+单个 Tool 的 `error/too_large` 会写入运行诊断且不会进入可引用集合；如果同一阶段已有其他合法
+证据，子图仍可完成并披露缺口。只有最终没有证据，或硬预算耗尽，才会按失败/预算停止原因上报。
 
 ## 7. LLM 与 Prompt
 

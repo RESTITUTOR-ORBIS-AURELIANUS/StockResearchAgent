@@ -14,7 +14,7 @@ _ACTIVE_REQUEST_STATUSES = {
     ResearchRequestStatus.PENDING,
     ResearchRequestStatus.RUNNING,
 }
-MAX_SENTIMENT_FLOW_REQUESTS_PER_RUN = 12
+MAX_SENTIMENT_FLOW_REQUESTS_PER_RUN = 20
 
 
 class SentimentFlowAgentGraph(Protocol):

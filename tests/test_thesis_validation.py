@@ -78,6 +78,15 @@ class ScriptedValidator:
         return self.handler(request)
 
 
+def test_default_validation_limits_bound_rounds_and_derived_theses() -> None:
+    limits = ThesisValidationLimits()
+
+    assert limits.max_research_rounds_per_thesis == 2
+    assert limits.max_research_requests_per_run == 20
+    assert limits.max_discovered_candidates_per_turn == 1
+    assert limits.max_discovered_candidates_per_run == 2
+
+
 def test_new_evidence_returns_to_same_thesis_context_before_next_thesis() -> None:
     initial = _evidence(
         "ev_initial_a",
@@ -330,12 +339,12 @@ def test_global_validation_research_budget_is_a_hard_limit() -> None:
     assert any("budget exhausted" in item for item in result["errors"])
 
 
-def test_single_thesis_stops_after_three_research_rounds() -> None:
+def test_single_thesis_stops_after_two_research_rounds() -> None:
     initial = _evidence(
         "ev_three_round_guard",
         target=STOCK_A,
         title="单观点预算初始事实",
-        description="即使模型持续追问，单观点也只能执行三轮补证。",
+        description="即使模型持续追问，单观点也只能执行两轮补证。",
     )
 
     class TechnicalGraph:
@@ -374,7 +383,7 @@ def test_single_thesis_stops_after_three_research_rounds() -> None:
     graph = build_research_graph(
         technical_agent_graph_factory=lambda **_: TechnicalGraph(),
         lead_research_strategist_model=ScriptedStrategist(
-            (_candidate(STOCK_A, "最多三轮", initial.evidence_id),)
+            (_candidate(STOCK_A, "最多两轮", initial.evidence_id),)
         ),
         thesis_validation_model=validator,
     )
@@ -383,9 +392,9 @@ def test_single_thesis_stops_after_three_research_rounds() -> None:
         graph.ainvoke({"run_id": RUN_ID, "target": MARKET, "as_of": AS_OF})
     )
 
-    assert len(validator.calls) == 4
-    assert len(result["research_findings"]) == 3
-    assert result["research_request_count"] == 3
+    assert len(validator.calls) == 3
+    assert len(result["research_findings"]) == 2
+    assert result["research_request_count"] == 2
     assert result["thesis_pool"][0].validation.status is (
         ThesisValidationStatus.INCONCLUSIVE
     )
@@ -662,6 +671,8 @@ def test_validator_adapter_and_prompt_use_hard_structured_contract() -> None:
     assert "不等于事实不存在，不是反证" in THESIS_VALIDATION_SYSTEM_PROMPT
     assert "previous_turns" in THESIS_VALIDATION_SYSTEM_PROMPT
     assert "VERIFIED / REVISED" in THESIS_VALIDATION_SYSTEM_PROMPT
+    assert "未来预测的判定规则" in THESIS_VALIDATION_SYSTEM_PROMPT
+    assert "不要仅因为未来尚未到来" in THESIS_VALIDATION_SYSTEM_PROMPT
 
 
 def _candidate(target: ResearchTarget, title: str, evidence_id: str):

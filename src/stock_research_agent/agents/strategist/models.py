@@ -45,11 +45,18 @@ class CandidateThesisDraft(DomainModel):
     """LLM 提出的可查证猜想；不携带 ID、验证状态或置信度。"""
 
     target: ResearchTarget
-    title: str = Field(min_length=1, max_length=200)
+    title: str = Field(
+        min_length=1,
+        max_length=200,
+        description="单一、陈述式、可被独立支持或反驳的核心主张，不得捆绑多个结论",
+    )
     description: str = Field(
         min_length=1,
         max_length=2_000,
-        description="基于证据提出的机制或趋势猜想，必须与已知事实措辞分离",
+        description=(
+            "基于证据提出的单一机制或趋势猜想；必须与已知事实措辞分离，限制条件不得变成"
+            "第二个并列观点"
+        ),
     )
     direction: ThesisDirection
     horizon: str = Field(min_length=1, max_length=100)

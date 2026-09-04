@@ -16,6 +16,7 @@ from stock_research_agent.agents.sentiment_flow.models import (
     SentimentFlowCheck,
     SentimentFlowEvidenceDraft,
     SentimentFlowReviewDecision,
+    SentimentFlowToolObservation,
     SentimentFlowVerificationRequestDraft,
     TargetedSentimentFlowPlan,
 )
@@ -23,6 +24,9 @@ from stock_research_agent.agents.sentiment_flow.prompts import (
     DAILY_ANALYSIS_SYSTEM_PROMPT,
     TARGETED_PLANNING_SYSTEM_PROMPT,
     VERIFICATION_REVIEW_SYSTEM_PROMPT,
+)
+from stock_research_agent.agents.sentiment_flow.subgraph import (
+    _uncitable_observation_error as _sentiment_observation_error,
 )
 from stock_research_agent.agents.technical.models import (
     TechnicalAgentRunSummary,
@@ -63,6 +67,13 @@ STOCK_TARGET = ResearchTarget(type=TargetType.STOCK, code="000001.SZ", name="平
 OTHER_STOCK_TARGET = ResearchTarget(type=TargetType.STOCK, code="000002.SZ", name="万科A")
 
 
+def test_default_sentiment_flow_limits_allow_deeper_tool_research() -> None:
+    limits = SentimentFlowAgentLimits()
+
+    assert limits.max_verification_rounds == 2
+    assert limits.max_total_tool_calls == 24
+
+
 class NoopProvider:
     async def query(self, request):  # pragma: no cover - fake Tools bypass provider
         raise AssertionError(f"unexpected provider call: {request.api_name}")
@@ -99,6 +110,27 @@ class ScriptedSentimentFlowModel:
         self.review_calls += 1
         assert request.observations
         return self.reviews.pop(0)
+
+
+def test_sentiment_observation_semantics_distinguish_empty_partial_and_error() -> None:
+    for status in ("ok", "partial", "empty"):
+        observation = SentimentFlowToolObservation(
+            call_id="sfc_r1_1_test",
+            tool_name="get_stock_active_money_flow_context",
+            arguments={"ts_code": STOCK_TARGET.code},
+            result={"status": status},
+        )
+        assert _sentiment_observation_error(observation, target_code=STOCK_TARGET.code) is None
+
+    failed = SentimentFlowToolObservation(
+        call_id="sfc_r1_1_test_error",
+        tool_name="get_stock_active_money_flow_context",
+        arguments={"ts_code": STOCK_TARGET.code},
+        result={"status": "too_large"},
+    )
+    message = _sentiment_observation_error(failed, target_code=STOCK_TARGET.code)
+    assert message is not None
+    assert "status=too_large" in message
 
 
 def test_daily_mode_builds_snapshot_evidence_and_targeted_money_flow_evidence() -> None:
@@ -563,6 +595,10 @@ async def fake_tool_runtime(
                     "strongest_limit_events": [],
                     "most_opened_limit_events": [],
                 },
+                "authorized_targets": [
+                    {"type": "MARKET", "code": "A_SHARE", "name": "A股市场"},
+                    {"type": "STOCK", "code": "000001.SZ", "name": "平安银行"},
+                ],
                 "coverage": {
                     "source_dataset_count": 1,
                     "optional_failure_count": 0,

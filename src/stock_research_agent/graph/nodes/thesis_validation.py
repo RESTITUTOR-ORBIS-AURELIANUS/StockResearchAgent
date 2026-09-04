@@ -207,6 +207,7 @@ def build_review_active_thesis_node(
             policy_notes=(
                 "当前观点完成前不会切换到其他观点。",
                 "每轮只能提出一个 ResearchRequest，响应会立即回到本会话。",
+                "每条观点最多执行两轮补证；全运行最多接受两条审查中衍生的新观点。",
                 "非 EVIDENCE_FOUND 的 ResearchFinding 既不是支持证据也不是反向证据。",
                 "只有 VERIFIED 或 REVISED 证据可以作为最终方向判断的决定性依据。",
             ),

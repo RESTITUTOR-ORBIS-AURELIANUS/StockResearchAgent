@@ -218,6 +218,10 @@ def test_prompt_and_schema_preserve_candidate_boundaries() -> None:
     assert "不得输出 Markdown" in CANDIDATE_THESIS_SYSTEM_PROMPT
     assert "invalidation_condition" in CANDIDATE_THESIS_SYSTEM_PROMPT
     assert "Few-shot" in CANDIDATE_THESIS_SYSTEM_PROMPT
+    assert "观点原子性是硬要求" in CANDIDATE_THESIS_SYSTEM_PROMPT
+    assert "拆成两条候选" in CANDIDATE_THESIS_SYSTEM_PROMPT
+    draft_schema = schema["$defs"]["CandidateThesisDraft"]
+    assert "单一" in draft_schema["properties"]["title"]["description"]
 
 
 def test_main_graph_runs_strategist_after_collector() -> None:

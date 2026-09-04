@@ -53,9 +53,23 @@ FINALIZE 规则：
 - reasoning_summary 必须分别陈述事实、推断和限制，remaining_questions 保留尚未解决的问题；
 - 不输出投资建议、仓位、目标价，也不修改事实证据。
 
+未来预测的判定规则：
+- 对未来方向、经营延续、趋势延续或风险演化的观点，SUPPORTED 表示“截至 as_of 的证据链已经
+  明确、直接且一致地支持该预测”，不要求被预测的未来结果已经实际发生；
+- 若同目标的 VERIFIED/REVISED 证据在与 horizon 相匹配的多个关键维度上方向一致，机制链条清晰，
+  且没有足以动摇核心预测的直接反证，可以判为 SUPPORTED；不要仅因为未来尚未到来就机械选择
+  INCONCLUSIVE，也不要为了免责声明式平衡而机械选择 MIXED；
+- 预测获得 SUPPORTED 不代表未来必然发生。confidence 表示对“现有证据足以支持该预测”这一判断的
+  确信程度，reasoning_summary 仍须写明预测依据、适用期限和失效条件；
+- 只有当关键传导环节完全没有证据、工具无法覆盖，或可信正反证据足以改变核心方向时，才选择
+  INCONCLUSIVE 或 MIXED；一般性风险、任何预测都存在的不确定性、尚未发生本身都不是反证；
+- 不得用上述规则放宽事实要求：UNVERIFIED 线索不能单独令预测变成 SUPPORTED，行业或市场背景也
+  不能替代观点目标自身的直接决定性证据。
+
 新观点规则：
 - 若查证过程中发现原观点遗漏的重要解释，可在 discovered_candidates 中记录最多
   max_discovered_candidates 条 CandidateThesisDraft；
+- 默认每轮最多 1 条、全运行最多 2 条；额度为 0 时必须返回空数组，不能用改写旧观点规避上限；
 - 新观点一律只是 UNVERIFIED 候选，不参与当前观点的 final_status，也不能打断当前串行会话；
 - 不得把原观点简单改写成“新观点”，且必须引用当前 evidence 中的真实 evidence_id。
 
@@ -112,4 +126,11 @@ Few-shot 3：直接反证可以完成审查
 增长主要来自资产处置，则可以 FINALIZE/REFUTED：把 ev_counter_example 放入
 evidence_assessments 并标记 stance=CONTRADICTING，在 reasoning_summary 说明它如何直接否定
 核心机制。不能仅凭媒体沉默、接口失败或 NO_MATCHING_EVIDENCE 得到 REFUTED。
+
+Few-shot 4：未来预测可以由当前清晰证据支持
+若原子观点为“未来一个季度核心经营改善有望延续”，同目标的 VERIFIED 证据已经确认连续两个可比
+报告期主营收入、扣非利润和经营现金流同向改善，订单或合同负债也继续增长，且没有直接反证，允许
+FINALIZE/SUPPORTED。reasoning_summary 应写明这是基于截至 as_of 的领先与持续性证据支持预测，
+并保留“后续订单转弱或现金流重新恶化”为失效条件；不能因为下一季度尚未结束而机械判
+INCONCLUSIVE。反之，如果只有一次业绩预告标题或一条 UNVERIFIED 新闻，则仍不足以 SUPPORTED。
 """.strip()

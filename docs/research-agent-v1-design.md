@@ -174,6 +174,10 @@ Provider 和接口，并可通过 `evidence_id` 回溯 `evidence_pool` 中的完
 `UNVERIFIED/confidence=null`。第一版不做证据语义去重，Prompt 禁止把相似记录数量直接解释为
 独立来源数量。
 
+候选观点采用原子性约束：每条只表达一个目标、一个主要机制或方向，以及一个与 `horizon` 一致的
+可判定主张。“短期转强但中期尚未反转”或“经营改善但市场尚未确认”必须拆成不同观点，不能因为
+标题天然同时包含正反两面而迫使后续审查只能输出 `MIXED`。
+
 ### 3.6 `ThesisValidationNode`
 
 投资论点审查员对每个候选观点串行执行：
@@ -193,6 +197,11 @@ Provider 和接口，并可通过 `evidence_id` 回溯 `evidence_pool` 中的完
 后五种状态保持空 `evidence_ids`，不得作为支持或反向证据。全局池中已经存在但本次再次命中的合法
 证据可以复用，不会被误报为“查无匹配”。
 
+未来预测可以在预测期限尚未结束时被判为 `SUPPORTED`：这里表示截至 `as_of` 的同目标决定性证据
+已在关键维度上形成清晰、一致的支持链，而不是承诺未来必然发生。未来尚未发生和一般性风险本身
+不是反证；只有关键环节缺证、工具不可覆盖或存在足以改变方向的可信反证时，才应落入
+`INCONCLUSIVE/MIXED`。
+
 ### 3.7 `ResearchCoordinatorNode`
 
 根据 `ResearchRequest.assigned_domain` 把任务路由回相应研究员。它只负责调度、次数和预算，不是 LLM Agent。
@@ -205,13 +214,14 @@ Provider 和接口，并可通过 `evidence_id` 回溯 `evidence_pool` 中的完
 
 控制查证循环。第一版建议：
 
-- 单条观点最多查证 3 轮；
-- 全局定向查证最多 12 次；
+- 单条观点最多查证 2 轮；
+- 全局定向查证最多 20 次；
+- 审查员每轮最多旁路提出 1 条衍生观点、整次运行最多接受 2 条；
 - 同一结构化请求指纹不得重复执行；同义请求另外由 Prompt 要求对照历史解释新颖性；
 - 单次连续上下文超过 120000 字符时失败关闭，不静默截断；
 - 无法判断的观点保留为 `INCONCLUSIVE`，不得编造结论。
 
-验证阶段使用独立 `validation_research_request_count` 计算 12 次预算；总
+验证阶段使用独立 `validation_research_request_count` 计算 20 次预算；总
 `research_request_count` 继续保存整个运行所有领域请求的审计计数。预算耗尽发生在新请求尚未创建时，
 因此不会伪造一个 `BUDGET_EXHAUSTED` Finding。
 
@@ -786,8 +796,10 @@ ID 判断，不执行基于标题、描述或向量相似度的语义重复检�
 ### 11.1 观点查证循环
 
 ```text
-max_validation_rounds_per_thesis = 3
-max_research_requests_per_run = 12
+max_validation_rounds_per_thesis = 2
+max_research_requests_per_run = 20
+max_discovered_candidates_per_turn = 1
+max_discovered_candidates_per_run = 2
 stop_when_no_new_evidence = true
 ```
 

@@ -652,6 +652,11 @@ def test_daily_sentiment_flow_service_and_tools_build_cross_sectional_snapshot()
         assert all(item.net_amount > 0 for item in snapshot.industry_top_inflows)
         assert all(item.net_amount < 0 for item in snapshot.industry_top_outflows)
         assert snapshot.stock_candidates.most_opened_limit_events[0].ts_code == "000002.SZ"
+        authorized = {(item.type.value, item.code) for item in snapshot.authorized_targets}
+        assert ("MARKET", "A_SHARE") in authorized
+        assert ("SECTOR", "801780.SI") in authorized
+        assert ("STOCK", "000001.SZ") in authorized
+        assert ("STOCK", "000002.SZ") in authorized
         assert snapshot.coverage.optional_failure_count == 0
         assert len(build.datasets) == 24
 
@@ -675,6 +680,12 @@ def test_daily_sentiment_flow_service_and_tools_build_cross_sectional_snapshot()
         result = await daily_tool.ainvoke({"candidate_count": 3})
         assert result["status"] == "ok"
         assert result["snapshot"]["industry_top_inflows"][0]["industry"] == "银行"
+        assert {
+            (item["type"], item["code"]) for item in result["snapshot"]["authorized_targets"]
+        } >= {
+            ("MARKET", "A_SHARE"),
+            ("STOCK", "000001.SZ"),
+        }
         assert result["context_ref"] is not None
         bundle = await data_store.get(RUN_ID, result["context_ref"])
         assert bundle.kind == "daily_sentiment_flow_snapshot"

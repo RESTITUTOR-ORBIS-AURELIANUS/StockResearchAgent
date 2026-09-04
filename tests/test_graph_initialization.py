@@ -364,7 +364,7 @@ def test_targeted_request_budget_cancels_the_remaining_queue() -> None:
             domain=EvidenceDomain.TECHNICAL,
             as_of=as_of,
         )
-        for index in range(13)
+        for index in range(21)
     ]
 
     class CompletingTechnicalGraph:
@@ -400,9 +400,9 @@ def test_targeted_request_budget_cancels_the_remaining_queue() -> None:
     )
 
     statuses = [request.status for request in result["research_requests"]]
-    assert statuses.count(ResearchRequestStatus.NO_NEW_EVIDENCE) == 12
+    assert statuses.count(ResearchRequestStatus.NO_NEW_EVIDENCE) == 20
     assert statuses.count(ResearchRequestStatus.CANCELLED_BY_BUDGET) == 1
-    assert result["research_request_count"] == 12
+    assert result["research_request_count"] == 20
     assert "technical request budget reached" in result["errors"][-1]
 
 

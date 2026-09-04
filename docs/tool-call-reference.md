@@ -1,7 +1,7 @@
 # StockResearchAgent Tool 调用规则与字段速查
 
-> 适用版本：Tool v1.5
-> 更新日期：2026-08-24
+> 适用版本：Tool v1.6
+> 更新日期：2026-08-27
 > 代码来源：`src/stock_research_agent/tools/`
 
 本文是维护已实现的技术、情绪资金、基本面、新闻事件四位证据 Agent、system prompt 和数据调用
@@ -267,6 +267,9 @@ search_market_news
 - 普通市场/中证指数：`index_price_bars` → `index_daily`，并读取
   `index_daily_metrics` → `index_dailybasic`；
 - 申万 `.SI`：`index_price_bars` → `sw_daily`，不虚构不存在的普通指数日指标表。
+- 外部 `.TI` 板块不能直接调用本 Tool。技术查证编排器会先按完整板块名在
+  `index_classify(src=SW2021)` 中解析唯一申万 `.SI` 代理（同名时优先一级）；无法唯一解析时不发起
+  行情请求。
 
 ```json
 {"ts_code":"000013.CSI","start_date":"2026-05-01","end_date":"2026-08-20"}
@@ -862,6 +865,7 @@ Service 会在本地按 `ann_date` 公告日再次执行闭区间过滤；这不
 | `market_flow` | 最近 14 日沪深港通资金、大盘资金流和沪深两市融资融券汇总 |
 | `industry_top_inflows/outflows` | 同花顺行业净流入/净流出候选 |
 | `stock_candidates` | THS/DC 个股净流入/流出、涨跌停强度和开板次数候选 |
+| `authorized_targets` | 从快照全部可引用记录确定性生成的市场、行业和股票标的白名单 |
 | `coverage` | 各来源实际记录数和可选来源失败数 |
 
 内部组合 `moneyflow_ths`、`moneyflow_dc`、`moneyflow_ind_ths`、
@@ -1107,7 +1111,9 @@ complete
 3. 不得修改或推测 as_of；不得使用 as_of 之后的数据。
 4. status=error 时不得把失败解释为数据为零；status=too_large 时先检查是否仍有 context_ref。
 5. status=partial 时只使用成功部分；新闻事件装配器会自动把缺少的 dataset 写入 limitations。
-6. status=empty 没有可引用行，不能形成 EvidenceRecord；只能记录为未解决问题，且不能扩大到其他日期或来源。
+6. status=empty 只证明“该精确接口和查询窗口无记录”。基本面与情绪资金 Tool 在保留完整查询来源时
+   可形成这一窄范围的否定证据；不具备可核验来源的 empty 只能记为未解决问题。两种情况都不得扩大到
+   其他日期、来源或永久性结论。
 7. 原始 Tool 数据不是 EvidenceRecord；需要提炼事实、时间、单位和来源后再提交证据。
 8. 不得让 LLM 心算可由程序计算的技术指标或财务比率。
 9. 只在 retryable=true 且协调器预算允许时重试；禁止无限 Tool 循环。

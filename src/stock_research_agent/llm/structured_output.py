@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -94,11 +94,16 @@ class ObservableStructuredOutput[ModelT: BaseModel]:
         method: StructuredOutputMethod,
         operation: str,
         options: StructuredOutputOptions,
+        json_schema_override: Mapping[str, Any] | None = None,
+        pre_validate: Callable[[Any], Any] | None = None,
+        post_validate: Callable[[ModelT], ModelT] | None = None,
     ) -> None:
         self._schema = schema
         self._method = method
         self._operation = operation
         self._options = options
+        self._pre_validate = pre_validate
+        self._post_validate = post_validate
         binding_kwargs: dict[str, Any] = {
             "method": method,
             "include_raw": True,
@@ -110,6 +115,12 @@ class ObservableStructuredOutput[ModelT: BaseModel]:
             # call, before LangChain's include_raw fallback can preserve the message.
             # A plain JSON Schema keeps cloud-side strictness while reserving all local
             # business validation, diagnostics and repair for this wrapper.
+            binding_schema = dict(json_schema_override or schema.model_json_schema())
+        elif json_schema_override is not None:
+            raise ValueError("json_schema_override 只能用于 method=json_schema")
+        elif pre_validate is not None:
+            # 让 function_calling 也先返回原始 mapping；否则 LangChain 会在本
+            # wrapper 之前用 Pydantic 解析，确定性规范化没有机会执行。
             binding_schema = schema.model_json_schema()
         self._runnable = chat_model.with_structured_output(binding_schema, **binding_kwargs)
 
@@ -164,7 +175,11 @@ class ObservableStructuredOutput[ModelT: BaseModel]:
             try:
                 if parsing_error is not None:
                     raise parsing_error
+                if self._pre_validate is not None:
+                    parsed = self._pre_validate(parsed)
                 validated = self._schema.model_validate(parsed)
+                if self._post_validate is not None:
+                    validated = self._post_validate(validated)
             except Exception as exc:
                 event_id = _event_id()
                 details = _exception_details(exc)
@@ -228,6 +243,9 @@ def build_observable_structured_output[ModelT: BaseModel](
     method: StructuredOutputMethod,
     operation: str,
     options: StructuredOutputOptions | None = None,
+    json_schema_override: Mapping[str, Any] | None = None,
+    pre_validate: Callable[[Any], Any] | None = None,
+    post_validate: Callable[[ModelT], ModelT] | None = None,
 ) -> ObservableStructuredOutput[ModelT]:
     return ObservableStructuredOutput(
         chat_model,
@@ -235,6 +253,9 @@ def build_observable_structured_output[ModelT: BaseModel](
         method=method,
         operation=operation,
         options=options or StructuredOutputOptions(),
+        json_schema_override=json_schema_override,
+        pre_validate=pre_validate,
+        post_validate=post_validate,
     )
 
 
@@ -269,8 +290,7 @@ def _repair_messages(
     correction = (
         f"上一条输出没有通过本地 {schema_name} 校验。请保持原任务事实不变，"
         "仅修正 JSON 结构和字段值；不要解释，不要输出 Markdown。\n"
-        "必须逐条修复以下错误：\n- "
-        + "\n- ".join(details[:12])
+        "必须逐条修复以下错误：\n- " + "\n- ".join(details[:12])
     )
     repaired = list(original_messages)
     repaired.append(HumanMessage(content=correction))

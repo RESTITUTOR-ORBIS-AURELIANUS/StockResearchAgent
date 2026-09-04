@@ -225,7 +225,7 @@ class FundamentalAgentLimits:
     announcement_lookback_days: int = 14
     max_verification_rounds: int = 2
     max_requests_per_round: int = 4
-    max_total_tool_calls: int = 20
+    max_total_tool_calls: int = 48
 
     def __post_init__(self) -> None:
         if not 3 <= self.daily_candidate_count <= 20:

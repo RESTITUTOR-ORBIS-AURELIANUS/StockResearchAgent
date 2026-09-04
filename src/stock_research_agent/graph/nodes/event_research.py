@@ -14,7 +14,7 @@ _ACTIVE_REQUEST_STATUSES = {
     ResearchRequestStatus.PENDING,
     ResearchRequestStatus.RUNNING,
 }
-MAX_EVENT_REQUESTS_PER_RUN = 12
+MAX_EVENT_REQUESTS_PER_RUN = 20
 
 
 class EventAgentGraph(Protocol):
